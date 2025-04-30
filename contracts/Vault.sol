@@ -321,7 +321,7 @@ contract Vault is IERC20, ReentrancyGuard{
 
         if (bytes(_nameOverride).length == 0) {
             name = string(
-                abi.encodePacked(IDetailedERC20(_token).symbol(), " yVault")
+                abi.encodePacked("st",IDetailedERC20(_token).symbol())
             );
         } else {
             name = _nameOverride;
@@ -329,7 +329,7 @@ contract Vault is IERC20, ReentrancyGuard{
 
         if (bytes(_symbolOverride).length == 0) {
             symbol = string(
-                abi.encodePacked("yv", IDetailedERC20(_token).symbol())
+                abi.encodePacked("st", IDetailedERC20(_token).symbol())
             );
         } else {
             symbol = _symbolOverride;
@@ -383,7 +383,7 @@ contract Vault is IERC20, ReentrancyGuard{
             keccak256(
                 abi.encodePacked(
                     DOMAIN_TYPE_HASH,
-                    keccak256(bytes("Yearn Vault")),
+                    keccak256(bytes("Steaking Token")),
                     keccak256(bytes(API_VERSION)),
                     bytes32(block.chainid),
                     bytes32(uint256(uint160(address(this))))
