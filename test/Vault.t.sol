@@ -30,6 +30,7 @@ contract VaultTest is Test {
         vault = new Vault();
     }
 
+    //? Test inizialize contract
     function testInitialize() internal {
         vm.startPrank(governance);
         vault.initialize(
@@ -81,6 +82,7 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
+    //?Test one user deposit and withdraw
     function testDepositAndWithdraw() internal {
         MockERC20(address(token)).mint(user1, 1_000 ether);
         vm.startPrank(user1);
@@ -93,6 +95,7 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
+    //?Test two user deposit and withdraw\
     function testDepositAndWithdrawMultiUser() internal {
         // Mint 1000 tokens to each user
         //User1 balance 1000 token
@@ -144,6 +147,68 @@ contract VaultTest is Test {
         assertEq(vault.balanceOf(user2), 0);
     }
 
+
+    //? test a usere trasfert share
+    function testTransfertShare() internal {
+
+        assertEq(token.balanceOf(address(vault)), 0);
+        assertEq(token.balanceOf(user2), 1000 ether);
+
+        vm.startPrank(user1);
+        token.approve(address(vault), 10 ether);
+        uint256 shares = vault.deposit(10 ether, user1);
+        vault.transfer(user2, shares);
+        assertEq(vault.balanceOf(user1), 0);
+        assertEq(vault.balanceOf(user2), shares);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(address(vault)), 10 ether);
+
+        vm.startPrank(user2);
+        token.approve(address(vault), shares);
+        uint256 assets = vault.withdraw(shares, user2, 100);
+        assertEq(assets, 10 ether);
+        assertEq(vault.balanceOf(user2), 0);
+
+
+        assertEq(token.balanceOf(user2), 1010 ether);
+        vm.stopPrank();
+        
+    }
+
+
+      //? test from a usere trasfert share
+    function testTransfertFromShare() internal {
+
+        assertEq(token.balanceOf(user2), 1010 ether);
+        uint balanceUser2 = token.balanceOf(user2);
+
+        vm.startPrank(user1);
+        uint beforeAllowance = token.allowance(user1, user2);
+        assertEq(beforeAllowance, 0);
+        token.approve(address(user2), 10 ether);
+        uint afterAllowance = token.allowance(user1, user2);
+        assertEq(afterAllowance, 10 ether);
+        uint balanceUser1 = token.balanceOf(user1);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        token.transferFrom(user1, user2, 10 ether);
+        uint beforeAllowance2 = token.allowance(user1, user2);
+        assertEq(beforeAllowance2, 0);
+        assertEq(token.balanceOf(user1), balanceUser1 - 10 ether);
+        assertEq(token.balanceOf(user2), balanceUser2 + 10 ether);
+
+        vm.stopPrank();
+        
+    }
+
+
+
+
+
+
+
     function testAllTogether() public {
         testInitialize();
         console.log("testInitialize");
@@ -151,6 +216,10 @@ contract VaultTest is Test {
         console.log("testDepositAndWithdraw");
         testDepositAndWithdrawMultiUser();
         console.log("testDepositAndWithdrawMultiUser");
+        testTransfertShare();
+        console.log("testTransfertShare");
+        testTransfertFromShare();
+        console.log("testTransfertFromShare");
     }
 }
 
@@ -163,11 +232,11 @@ Un utente può depositare type(uint256).max e viene calcolato correttamente.
 
 Dopo un deposito:
 
-Lo share balanceOf(user) è aggiornato.
 
-totalSupply è aggiornato.
 
-    totalIdle è aggiornato.
+
+
+
 
     Evento Deposit è emesso correttamente.
 
@@ -179,21 +248,18 @@ withdraw() fallisce se si tenta di ritirare più di balanceOf(user).
 
 Dopo un withdraw():
 
-balanceOf(user) diminuisce correttamente.
 
-totalSupply è aggiornato.
 
-    totalIdle è aggiornato.
+
+
+
 
     Evento Withdraw è emesso correttamente.
 
 🔁 Transfer / Approve / Allowance
 
-transfer() sposta correttamente le share tra utenti.
 
-transferFrom() funziona con approve() e aggiorna allowance.
 
-increaseAllowance() e decreaseAllowance() modificano il valore correttamente.
 
     Eventi Transfer e Approval sono emessi.
 
