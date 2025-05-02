@@ -7,6 +7,6 @@ import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20P
 
 contract Liquid is ERC20, ERC20Permit {
     constructor(address recipient) ERC20("Liquid", "LIQ") ERC20Permit("Liquid") {
-        _mint(recipient, 100_000_000_000 * 10 ** decimals()); //100 KK
+        _mint(recipient, 1_000_000_000 * 10 ** decimals()); //100 KK
     }
 }
