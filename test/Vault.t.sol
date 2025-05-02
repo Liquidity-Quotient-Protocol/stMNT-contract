@@ -30,7 +30,13 @@ contract VaultTest is Test {
         vault = new Vault();
     }
 
-    //? Test inizialize contract
+    /**
+     * @notice Tests correct initialization of the Vault contract.
+     * - Ensures that all roles (governance, management, guardian, treasury) are assigned correctly.
+     * - Validates the default parameters (fees, degradation rate, token metadata).
+     * - Verifies the deposit limit is correctly settable by governance.
+     * - Reverts on re-initialization and unauthorized access to fee configuration.
+     */
     function testInitialize() internal {
         vm.startPrank(governance);
         vault.initialize(
@@ -82,20 +88,37 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    //?Test one user deposit and withdraw
+    /**
+     * @notice Tests a single user's full deposit and withdrawal lifecycle.
+     * - User deposits 1000 tokens and receives 1000 shares.
+     * - Verifies that pricePerShare remains 1e18 (no strategy).
+     * - Withdraws all shares and receives original amount.
+     * - Attempting a second withdrawal reverts (no remaining shares).
+     */
     function testDepositAndWithdraw() internal {
         MockERC20(address(token)).mint(user1, 1_000 ether);
         vm.startPrank(user1);
         token.approve(address(vault), 1000 ether);
         uint256 shares = vault.deposit(1000 ether, user1);
         assertEq(shares, 1000 ether);
+        assertEq(vault.pricePerShare(), 1 ether);
         vault.approve(address(vault), 1 ether);
         uint256 assets = vault.withdraw(shares, user1, 100);
         assertEq(assets, 1000 ether);
+
+        vault.approve(address(vault), 1 ether);
+        vm.expectRevert();
+        vault.withdraw(shares, user1, 100);
         vm.stopPrank();
     }
 
-    //?Test two user deposit and withdraw\
+    /**
+     * @notice Tests deposits and withdrawals across multiple users.
+     * - User1 and User2 both deposit 1000 tokens.
+     * - Validates totalSupply and totalIdle increase accordingly.
+     * - Each user is able to withdraw their full balance.
+     * - Final state assertions ensure internal accounting is reset.
+     */
     function testDepositAndWithdrawMultiUser() internal {
         // Mint 1000 tokens to each user
         //User1 balance 1000 token
@@ -147,10 +170,14 @@ contract VaultTest is Test {
         assertEq(vault.balanceOf(user2), 0);
     }
 
-
-    //? test a usere trasfert share
+    /**
+     * @notice Tests the transfer of vault shares between users.
+     * - User1 deposits 10 tokens and receives 10 shares.
+     * - Shares are transferred to User2.
+     * - User2 withdraws the shares and receives corresponding tokens.
+     * - Final balance check confirms accuracy.
+     */
     function testTransfertShare() internal {
-
         assertEq(token.balanceOf(address(vault)), 0);
         assertEq(token.balanceOf(user2), 1000 ether);
 
@@ -170,16 +197,17 @@ contract VaultTest is Test {
         assertEq(assets, 10 ether);
         assertEq(vault.balanceOf(user2), 0);
 
-
         assertEq(token.balanceOf(user2), 1010 ether);
         vm.stopPrank();
-        
     }
 
-
-      //? test from a usere trasfert share
-    function testTransfertFromShare() internal {
-
+    /**
+     * @notice Tests ERC20 `transferFrom()` for the underlying token.
+     * - User1 approves User2 to transfer tokens on their behalf.
+     * - User2 executes a `transferFrom()` and receives tokens.
+     * - Validates allowance is consumed and balances updated.
+     */
+    function testTransfertFromToken() internal {
         assertEq(token.balanceOf(user2), 1010 ether);
         uint balanceUser2 = token.balanceOf(user2);
 
@@ -200,135 +228,108 @@ contract VaultTest is Test {
         assertEq(token.balanceOf(user2), balanceUser2 + 10 ether);
 
         vm.stopPrank();
-        
     }
 
+    /**
+     * @notice Tests share allowances and `transferFrom()` logic for the Vault token.
+     * - User1 deposits shares and sets an allowance for User2.
+     * - User2 increases/decreases allowance and performs a transferFrom.
+     * - Ensures allowance is consumed and balances are updated correctly.
+     */
+    function testTransfertFromShare() internal {
+        uint balanceUser2 = vault.balanceOf(user2);
 
+        vm.startPrank(user1);
+        token.approve(address(vault), 10 ether);
+        uint256 shares = vault.deposit(10 ether, user1);
+        assertEq(shares, 10 ether);
 
+        vault.approve(user2, 1 ether);
+        assertEq(vault.allowance(user1, user2), 1 ether);
+        vault.increaseAllowance(user2, 1 ether);
+        assertEq(vault.allowance(user1, user2), 2 ether);
+        vault.decreaseAllowance(user2, 1 ether);
+        assertEq(vault.allowance(user1, user2), 1 ether);
+        vm.stopPrank();
 
+        vm.startPrank(user2);
+        vault.transferFrom(user1, user2, 0.5 ether);
+        assertEq(vault.allowance(user1, user2), 0.5 ether);
+        assertEq(vault.balanceOf(user1), 9.5 ether);
+        assertEq(vault.balanceOf(user2), balanceUser2 + 0.5 ether);
+        vm.stopPrank();
+    }
 
+    /**
+     * @notice Verifies that `lockedProfit()` is zero when no strategy report has occurred.
+     * - Ensures the vault starts with no locked profit unless explicitly reported.
+     * - Important baseline check for profit-locking logic.
+     */
+    function testLockedProfitZeroWithoutReport() internal view {
+        assertEq(vault.lockedProfit(), 0);
+    }
 
+    /**
+     * @notice Tests the ability to sweep unrelated (non-vault) tokens from the vault.
+     * - An attacker mints a fake token to the Vault.
+     * - Governance is able to sweep the fake token out.
+     * - Ensures the Vault complies with the Yearn `sweep()` pattern.
+     * - Protects against dust accumulation or accidental transfers.
+     */
+    function testSweepOtherToken() internal {
+        address attacker = address(123);
+        vm.startPrank(attacker);
+        ERC20 fake = new MockERC20("Fake", "FAKE");
+        MockERC20(address(fake)).mint(address(vault), 100 ether);
+        vm.stopPrank();
+        vm.prank(governance);
+        vault.sweep(address(fake), type(uint256).max);
+        assertEq(fake.balanceOf(governance), 100 ether);
+    }
+
+    /**
+     * @notice Ensures that the Vault's own managed token cannot be swept.
+     * - User deposits tokens into the Vault (making them "managed").
+     * - Governance attempts to sweep Vault's own token and reverts.
+     * - Enforces a critical invariant: managed tokens are not sweepable unless in excess.
+     */
+    function testCannotSweepVaultToken() internal {
+        vm.startPrank(user1);
+        token.approve(address(vault), 1 ether);
+        vault.deposit(1 ether, user1);
+        vm.stopPrank();
+
+        vm.prank(governance);
+        vm.expectRevert("Vault: no excess vault token");
+        vault.sweep(address(token), type(uint256).max);
+    }
 
     function testAllTogether() public {
+        // ✅ Initializes the Vault and verifies core parameters
         testInitialize();
-        console.log("testInitialize");
+
+        // ✅ Single user deposit and withdrawal test
         testDepositAndWithdraw();
-        console.log("testDepositAndWithdraw");
+
+        // ✅ Multi-user deposits and withdrawals; share accounting consistency
         testDepositAndWithdrawMultiUser();
-        console.log("testDepositAndWithdrawMultiUser");
+
+        // ✅ Tests share transfers between users
         testTransfertShare();
-        console.log("testTransfertShare");
+
+        // ✅ Tests token.transferFrom() and token allowance behavior
+        testTransfertFromToken();
+
+        // ✅ Tests vault.transferFrom() and share allowance behavior
         testTransfertFromShare();
-        console.log("testTransfertFromShare");
+
+        // ✅ Verifies that locked profit remains zero without any strategy reports
+        testLockedProfitZeroWithoutReport();
+
+        // ✅ Positive sweep() test: allows sweeping unrelated tokens
+        testSweepOtherToken();
+
+        // ✅ Negative sweep() test: cannot sweep Vault's own token unless it's excess
+        testCannotSweepVaultToken();
     }
 }
-
-/*
-💰 Deposito
-
-
-
-Un utente può depositare type(uint256).max e viene calcolato correttamente.
-
-Dopo un deposito:
-
-
-
-
-
-
-
-    Evento Deposit è emesso correttamente.
-
-🧾 Prelievo
-
-
-
-withdraw() fallisce se si tenta di ritirare più di balanceOf(user).
-
-Dopo un withdraw():
-
-
-
-
-
-
-
-    Evento Withdraw è emesso correttamente.
-
-🔁 Transfer / Approve / Allowance
-
-
-
-
-    Eventi Transfer e Approval sono emessi.
-
-🧾 ERC20 Metadata
-
-totalSupply() restituisce il totale corretto.
-
-balanceOf() è consistente per ogni utente.
-
-allowance(), approve() funzionano come da standard.
-
-    pricePerShare() è 1e18 se non ci sono strategie né locked profit.
-
-🔐 Sicurezza / Permissioning
-
-Solo governance può:
-
-setGovernance(), acceptGovernance()
-
-setManagement(), setRewards(), setGuardian()
-
-setPerformanceFee(), setManagementFee()
-
-    setDepositLimit()
-
-setEmergencyShutdown(true) può essere chiamato solo da governance o guardian.
-
-    setEmergencyShutdown(false) solo da governance.
-
-🧠 Logica interna
-
-_calculateLockedProfit() restituisce il valore corretto dopo X blocchi.
-
-_shareValue(shares) e _sharesForAmount(amount) sono coerenti e inversi.
-
-maxAvailableShares() restituisce solo totalIdle se non ci sono strategie.
-
-    availableDepositLimit() riflette correttamente depositLimit - totalAssets.
-
-🧹 Sweep
-
-sweep(token) restituisce i token estranei a governance.
-
-    Non è possibile sweep() il token gestito (token) se non in eccesso.
-
-🧪 Extra Bonus (non urgenti per fedeltà, ma consigliati)
-
-Test di permit() con firma off-chain (EIP-2612).
-
-Test di eventi duplicati (Transfer, Approval) non presenti più di una volta.
-
-    Gas usage su deposit() e withdraw() coerente (benchmark yearn).
-
-🛠️ Setup test consigliato
-
-    Mock token ERC20 (18 decimali)
-
-    Utente A (depositor), Utente B (recipient)
-
-    Ruoli: governance, guardian, management, rewards
-
-📦 Test Strategy (quando la aggiungerai)
-
-addStrategy() registra correttamente i parametri.
-
-report(gain/loss/debt) aggiorna i contatori e i fondi correttamente.
-
-migrateStrategy() sposta lo stato e i fondi.
-
-    revokeStrategy() azzera i limiti ma mantiene la posizione.
-
- */
