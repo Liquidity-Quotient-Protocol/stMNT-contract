@@ -8,3 +8,6 @@ optimizer_runs = 200
 
 [profile.release]
 via_ir = true
+[rpc_endpoints]
+mantlesepolia = "https://rpc.sepolia.mantle.xyz"
+

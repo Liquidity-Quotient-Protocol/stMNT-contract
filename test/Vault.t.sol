@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {Vault} from "../contracts/Vault.sol";
+import {StMNT} from "../contracts/Vault.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -15,7 +15,7 @@ contract MockERC20 is ERC20 {
 }
 
 contract VaultTest is Test {
-    Vault public vault;
+    StMNT public vault;
     ERC20 public token;
 
     address public governance = address(1);
@@ -27,7 +27,7 @@ contract VaultTest is Test {
 
     function setUp() public {
         token = new MockERC20("Wrap MNT", "WMNT");
-        vault = new Vault();
+        vault = new StMNT();
     }
 
     /**
@@ -43,8 +43,8 @@ contract VaultTest is Test {
             address(token),
             governance,
             treasury,
-            "Staked Mantle Vault",
-            "sMNT",
+            "stMNT",
+            "stMNT",
             guardian,
             management
         );
@@ -53,8 +53,8 @@ contract VaultTest is Test {
         assertEq(vault.management(), management);
         assertEq(vault.guardian(), guardian);
         assertEq(vault.rewards(), treasury);
-        assertEq(vault.name(), "Staked Mantle Vault");
-        assertEq(vault.symbol(), "sMNT");
+        assertEq(vault.name(), "stMNT");
+        assertEq(vault.symbol(), "stMNT");
         assertEq(address(vault.token()), address(token));
 
         assertEq(vault.performanceFee(), 1_000);

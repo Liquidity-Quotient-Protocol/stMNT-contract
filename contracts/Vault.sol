@@ -33,7 +33,7 @@ interface IStrategy  {
 /**
  * @dev Main Vault Contract
  */
-contract Vault is IERC20, ReentrancyGuard{
+contract StMNT is IERC20, ReentrancyGuard{
     // ========================== Constants ===============================
 
     /// @notice Version identifier of the Vault API
