@@ -336,7 +336,7 @@ contract StMNT is IERC20, ReentrancyGuard{
         }
 
         uint256 _decimals = IDetailedERC20(_token).decimals();
-        require(_decimals < 256, "Vault: invalid decimals");
+        require(_decimals == 18, "Vault: token must have 18 decimals");
         decimals = uint8(_decimals);
 
         governance = _governance;
@@ -1450,7 +1450,7 @@ contract StMNT is IERC20, ReentrancyGuard{
         address _strategy
     ) internal view returns (uint256) {
         uint256 _lastReport = strategies[_strategy].lastReport;
-        uint256 timeSinceLast = block.timestamp - lastReport;
+        uint256 timeSinceLast = block.timestamp - _lastReport;
         uint256 totalHarvestTime = _lastReport -
             strategies[_strategy].activation;
 
