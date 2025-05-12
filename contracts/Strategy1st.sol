@@ -11,32 +11,37 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "./interfaces/<protocol>/<Interface>.sol";
+import {Iinit} from "./DefiProtocol/InitProt.sol";
+import {IInitCore} from "./interface/IInitCore.sol";
+import {IInitCore, ILendingPool} from "./interface/IInitCore.sol";
 
-contract Strategy is BaseStrategy {
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+contract Strategy is BaseStrategy, Iinit, Ownable {
     using SafeERC20 for IERC20;
     using Address for address;
 
+    address public immutable _initAddr =
+        0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
+    address public immutable WMNT = 0x1234567890AbcdEF1234567890aBcdef12345678; //!FITTIZZIOP
+    address public lendingPool; //0x44949636f778fAD2b139E665aee11a2dc84A2976
+    uint private balanceShare;
+
     // solhint-disable-next-line no-empty-blocks
-    constructor(address _vault) BaseStrategy(_vault) {}
+    constructor(
+        address _vault,
+        address _owner
+    ) BaseStrategy(_vault) Iinit(_initAddr) Ownable(_owner) {}
 
     // Funzioni per la gestione della strategia
 
-    address[] public protocols;
-    mapping(uint8 => address) public procolsIndex;
-
-    //Aggiorniamo gli address dei protocolli, seppur le funzioni esterne dei protocolli resteranno le stesse si puo sempre aggiornare l'address della strategia penso, oppure puo esser
-    function setProtocolsAddress(address _address) external {
-        //!QUI VA L'ONLY OWNER
-        require(_address != address(0), "Address is not a contract");
-        protocols.push(_address);
-        procolsIndex[uint8(protocols.length)] = _address;
+    function setLendingPool(address _lendingPool) external onlyOwner {
+        require(_lendingPool != address(0), "Set correct Address");
+        lendingPool = _lendingPool;
     }
 
     //Aggiornamento spesa manuale
-    function updateUnlimitedSpending(bool _approve) external {
-        //!QUI VA L'ONLY OWNER
+    function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
             SafeERC20.safeIncreaseAllowance(
                 IERC20(want),
@@ -48,6 +53,18 @@ contract Strategy is BaseStrategy {
         }
     }
 
+    function updateUnlimitedSpendingInit(bool _approve) external onlyOwner {
+        if (_approve) {
+            SafeERC20.safeIncreaseAllowance(
+                IERC20(want),
+                _initAddr,
+                type(uint256).max
+            );
+        } else {
+            SafeERC20.forceApprove(IERC20(want), _initAddr, 0);
+        }
+    }
+
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
 
     function name() external view override returns (string memory) {
@@ -56,8 +73,12 @@ contract Strategy is BaseStrategy {
     }
 
     function estimatedTotalAssets() public view override returns (uint256) {
-        // TODO: Build a more accurate estimate using the value of all positions in terms of `want`
-        return want.balanceOf(address(this));
+        //? Build a more accurate estimate using the value of all positions in terms of `want`
+        uint amountInShare = ILendingPool(lendingPool).debtShareToAmtStored(
+            balanceShare
+        );
+        uint wantBal = want.balanceOf(address(this));
+        return wantBal + amountInShare;
     }
 
     function prepareReturn(
@@ -151,10 +172,10 @@ contract Strategy is BaseStrategy {
         internal
         view
         override
-        returns (address[] memory)
+        returns (address[] memory tokens)
     // solhint-disable-next-line no-empty-blocks
     {
-
+        tokens[0] = lendingPool;
     }
 
     /**
@@ -174,16 +195,14 @@ contract Strategy is BaseStrategy {
     function ethToWant(
         uint256 _amtInWei
     ) public view virtual override returns (uint256) {
-        // TODO create an accurate price oracle
-        //! implementero un oracolo per il prezzo di MNT in ETH
         return _amtInWei;
     }
 
     function _withdrawTokenFromStrategy(
-        uint256 _amoutn
+        uint256 _amount
     ) internal returns (uint256 returnAmount) {
-        //! QUI DEVO RITIRARE I FONDI DALLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
-        returnAmount = 0;
+        // QUI DEVO RITIRARE I FONDI DALLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
+        (returnAmount, ) = _withdrawSingleAmount(_amount);
     }
 
     function _returnDepositPlatformValue()
@@ -191,26 +210,60 @@ contract Strategy is BaseStrategy {
         view
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
-        //! non so ancora come fare ovviamente
-        return (_profit, _loss, _debtPayment);
+        uint256 invested = ILendingPool(lendingPool).debtShareToAmtStored(
+            balanceShare
+        );
+        uint256 liquid = want.balanceOf(address(this));
+        uint256 totalAssets = invested + liquid;
+        _profit = totalAssets;
+        _loss = 0;
+        _debtPayment = liquid;
     }
 
     function _investInStrategy(
         uint256 _amount
     ) internal returns (bool success) {
-        //! QUI DEVO INVESTIRE I FONDI NELLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
+        // QUI DEVO INVESTIRE I FONDI NELLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
+
+        uint256 share = depositInit(lendingPool, WMNT, _amount, address(this));
+        balanceShare += share;
         success = true;
     }
+
+    event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceShare);
 
     function _withdrawSingleAmount(
         uint256 _amount
     ) internal returns (uint256 returnAmount, uint256 _loss) {
-        //! QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
+        // QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
+        uint256 share = ILendingPool(lendingPool).debtAmtToShareCurrent(
+            _amount
+        );
+        if (share >= balanceShare) {
+            emit ProblemWithWithdrawStrategy(
+                block.timestamp,
+                share,
+                balanceShare
+            );
+            revert("ProblemWithWithdrawStrategy");
+        }
+        balanceShare -= share;
+        uint _returnamount = withdrawInit(lendingPool, share, address(this));
+        require(_returnamount == _amount, "Problem with amount returned");
         returnAmount = _amount;
         _loss = 0;
     }
 
     function _totalRecall() internal returns (bool success) {
-        //! semplicemente chiamiamo tutti i fondi dalle varie piattaforme
-    } 
+        // semplicemente chiamiamo tutti i fondi dalle varie piattaforme
+        uint _amount = ILendingPool(lendingPool).debtShareToAmtCurrent(
+            balanceShare
+        );
+        _withdrawSingleAmount(_amount);
+        success = true;
+    }
+
+    function getCurrentDebtValue() external view returns (uint256) {
+        return ILendingPool(lendingPool).debtShareToAmtStored(balanceShare);
+    }
 }
