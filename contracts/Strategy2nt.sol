@@ -11,27 +11,28 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {Iinit} from "./DefiProtocol/InitProt.sol";
-import {IInitCore} from "./interface/IInitCore.sol";
-import {IInitCore, ILendingPool} from "./interface/IInitCore.sol";
-
+import {Lendl} from "./DefiProtocol/LendlProt.sol";
+import {IProtocolDataProvider, ILendingPool} from "./interface/ILendl.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Strategy1st is BaseStrategy, Iinit, Ownable {
+contract Strategy1st is BaseStrategy, Ownable, Lendl {
     using SafeERC20 for IERC20;
     using Address for address;
 
-    address public immutable _initAddr =
-        0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
+    address public immutable lendlAddress =
+        0x972BcB0284cca0152527c4f70f8F689852bCAFc5; //! mock
     address public immutable WMNT = 0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
+    address public immutable lendlDataProvider = 0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
     address public lendingPool; //0x44949636f778fAD2b139E665aee11a2dc84A2976
+    address public lToken;
+
     uint private balanceShare;
 
     // solhint-disable-next-line no-empty-blocks
     constructor(
         address _vault,
         address _owner
-    ) BaseStrategy(_vault) Iinit(_initAddr) Ownable(_owner) {}
+    ) BaseStrategy(_vault) Ownable(_owner) {}
 
     // Funzioni per la gestione della strategia
     /**
@@ -41,6 +42,11 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     function setLendingPool(address _lendingPool) external onlyOwner {
         require(_lendingPool != address(0), "Set correct Address");
         lendingPool = _lendingPool;
+    }
+
+    function setlToken(address _lToken) external onlyOwner {
+        require(lToken != address(0), "Set correct Address");
+        lToken = _lToken;
     }
 
     //Aggiornamento spesa manuale
@@ -64,15 +70,15 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @notice Updates unlimited spending allowance for Init on the `want` token.
      * @param _approve If true, grants max allowance; otherwise revokes.
      */
-    function updateUnlimitedSpendingInit(bool _approve) external onlyOwner {
+    function updateUnlimitedSpendingLendl(bool _approve) external onlyOwner {
         if (_approve) {
             SafeERC20.safeIncreaseAllowance(
                 IERC20(want),
-                _initAddr,
+                lendlAddress,
                 type(uint256).max
             );
         } else {
-            SafeERC20.forceApprove(IERC20(want), _initAddr, 0);
+            SafeERC20.forceApprove(IERC20(want), lendlAddress, 0);
         }
     }
 
@@ -83,7 +89,14 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function name() external view override returns (string memory) {
         // Add your own name here, suggestion e.g. "StrategyCreamYFI"
-        return "Strategy StMantle defi steaking";
+        return "Strategy StMantle defi steaking Lendl deposit";
+    }
+
+    function lTokenToWant(uint256 lTokenAmount) public view returns (uint256) {
+        uint256 rate = IProtocolDataProvider(lendlDataProvider).getReserveNormalizedIncome(
+            address(want)
+        );
+        return (lTokenAmount * rate) / 1e27;
     }
 
     /**
@@ -92,11 +105,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function estimatedTotalAssets() public view override returns (uint256) {
         //? Build a more accurate estimate using the value of all positions in terms of `want`
-        uint amountInShare = ILendingPool(lendingPool).debtShareToAmtStored(
-            balanceShare
-        );
-        uint wantBal = want.balanceOf(address(this));
-        return wantBal + amountInShare;
+        uint256 lTokenBalance = IERC20(lToken).balanceOf(address(this));
+        uint wantConv = lTokenToWant(lTokenBalance);
+        uint256 wantBal = want.balanceOf(address(this));
+        return wantBal + wantConv;
     }
 
     /**
@@ -246,6 +258,28 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         return _amtInWei;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     /**
      * @notice Withdraws funds from the Init strategy.
      * @param _amount Amount to withdraw in `want`.
@@ -269,9 +303,8 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         view
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
-        uint256 invested = ILendingPool(lendingPool).debtShareToAmtStored(
-            balanceShare
-        );
+  
+        uint256 invested = lTokenToWant(balanceShare);
         uint256 liquid = want.balanceOf(address(this));
         uint256 totalAssets = invested + liquid;
         _profit = totalAssets;
@@ -289,7 +322,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     ) internal returns (bool success) {
         // QUI DEVO INVESTIRE I FONDI NELLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
 
-        uint256 share = depositInit(lendingPool, WMNT, _amount, address(this));
+        uint256 share = depositLendl(lendingPool,WMNT,_amount,lToken);
         balanceShare += share;
         success = true;
     }
@@ -306,9 +339,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         uint256 _amount
     ) internal returns (uint256 returnAmount, uint256 _loss) {
         // QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
-        uint256 share = ILendingPool(lendingPool).debtAmtToShareCurrent(
-            _amount
-        );
+        uint256 share = wantToLToken(_amount);
         if (share >= balanceShare) {
             emit ProblemWithWithdrawStrategy(
                 block.timestamp,
@@ -316,13 +347,21 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
                 balanceShare
             );
             revert("ProblemWithWithdrawStrategy");
-        }
+        }   
         balanceShare -= share;
-        uint _returnamount = withdrawInit(lendingPool, share, address(this));
+        uint _returnamount = withdrawLendl(lendingPool, lToken, _amount);
         require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
         returnAmount = _amount;
         _loss = 0;
     }
+
+
+    function wantToLToken(uint256 wantAmount) public view returns (uint256) {
+    uint256 rate = IProtocolDataProvider(lendlDataProvider).getReserveNormalizedIncome(address(want));
+    require(rate > 0, "Invalid rate");
+    return (wantAmount * 1e27) / rate;
+}
+
 
     /**
      * @notice Withdraws all assets from Init and resets position.
@@ -330,10 +369,9 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function _totalRecall() internal returns (bool success) {
         // semplicemente chiamiamo tutti i fondi dalle varie piattaforme
-        uint _amount = ILendingPool(lendingPool).debtShareToAmtCurrent(
-            balanceShare
-        );
-        _withdrawSingleAmount(_amount);
+        uint balanceShare = IERC20(lToken).balanceOf(address(this));
+
+        _withdrawSingleAmount(wantToLToken(balanceShare));
         success = true;
     }
 
@@ -342,6 +380,6 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @return The amount of `want` represented by `balanceShare`.
      */
     function getCurrentDebtValue() external view returns (uint256) {
-        return ILendingPool(lendingPool).debtShareToAmtStored(balanceShare);
+        return lTokenToWant(balanceShare);
     }
 }
