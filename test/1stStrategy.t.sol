@@ -32,7 +32,15 @@ contract VaultTest is Test {
     // Mantle WMNT mainet
 
     function setUp() public {
-        vault = new StMNT();
+        vault = new StMNT(
+            address(WMNT),
+            governance,
+            treasury,
+            "stMNT",
+            "stMNT",
+            guardian,
+            management
+        );
     }
 
     function wrapMNT(uint256 _amount) internal {
@@ -48,15 +56,6 @@ contract VaultTest is Test {
      */
     function testInitialize() internal {
         vm.startPrank(governance);
-        vault.initialize(
-            address(WMNT),
-            governance,
-            treasury,
-            "stMNT",
-            "stMNT",
-            guardian,
-            management
-        );
         assertEq(vault.governance(), governance);
         assertEq(vault.management(), management);
         assertEq(vault.guardian(), guardian);
@@ -77,16 +76,6 @@ contract VaultTest is Test {
         assertEq(vault.performanceFee(), 0);
         assertEq(vault.managementFee(), 0);
 
-        vm.expectRevert();
-        vault.initialize(
-            address(WMNT),
-            governance,
-            treasury,
-            "Staked Mantle Vault",
-            "sMNT",
-            guardian,
-            management
-        );
         vm.stopPrank();
         vm.startPrank(user1);
         vm.expectRevert("Vault: !governance");

@@ -30,7 +30,15 @@ contract VaultTest is Test {
 
     function setUp() public {
         token = new MockERC20("Wrap MNT", "WMNT");
-        vault = new StMNT();
+        vault = new StMNT(
+            address(token),
+            governance,
+            treasury,
+            "stMNT",
+            "stMNT",
+            guardian,
+            management
+        );
     }
 
     /**
@@ -42,15 +50,7 @@ contract VaultTest is Test {
      */
     function testInitialize() internal {
         vm.startPrank(governance);
-        vault.initialize(
-            address(token),
-            governance,
-            treasury,
-            "stMNT",
-            "stMNT",
-            guardian,
-            management
-        );
+      
 
         assertEq(vault.governance(), governance);
         assertEq(vault.management(), management);
@@ -72,16 +72,7 @@ contract VaultTest is Test {
         assertEq(vault.performanceFee(), 0);
         assertEq(vault.managementFee(), 0);
 
-        vm.expectRevert();
-        vault.initialize(
-            address(token),
-            governance,
-            treasury,
-            "Staked Mantle Vault",
-            "sMNT",
-            guardian,
-            management
-        );
+
         vm.stopPrank();
         vm.startPrank(user1);
         vm.expectRevert("Vault: !governance");

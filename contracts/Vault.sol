@@ -19,7 +19,7 @@ interface IDetailedERC20 is IERC20 {
 /**
  * @dev Interface representing a strategy interacting with the Vault.
  */
-interface IStrategy  {
+interface IStrategy {
     function want() external view returns (address);
     function vault() external view returns (address);
     function isActive() external view returns (bool);
@@ -33,7 +33,7 @@ interface IStrategy  {
 /**
  * @dev Main Vault Contract
  */
-contract StMNT is IERC20, ReentrancyGuard{
+contract StMNT is IERC20, ReentrancyGuard {
     // ========================== Constants ===============================
 
     /// @notice Version identifier of the Vault API
@@ -42,13 +42,13 @@ contract StMNT is IERC20, ReentrancyGuard{
     // ========================== ERC20 Standard Storage ==================
 
     /// @notice Name of the Vault's token
-    string public  name;
+    string public name;
 
     /// @notice Symbol of the Vault's token
-    string public  symbol;
+    string public symbol;
 
     /// @notice Number of decimals used by the Vault's token
-    uint8 public  decimals;
+    uint8 public decimals;
 
     /// @notice Mapping of address to balance
     mapping(address => uint256) public override balanceOf;
@@ -90,7 +90,6 @@ contract StMNT is IERC20, ReentrancyGuard{
         uint256 totalGain; // Total profit realized by strategy
         uint256 totalLoss; // Total loss realized by strategy
     }
-
 
     // ============================= Vault Specific Events =============================
 
@@ -290,6 +289,19 @@ contract StMNT is IERC20, ReentrancyGuard{
             "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
         );
 
+    constructor(
+        address _token,
+        address _governance,
+        address _rewards,
+        string memory _nameOverride,
+        string memory _symbolOverride,
+        address _guardian,
+        address _management
+    ){
+        initialize(_token, _governance, _rewards, _nameOverride, _symbolOverride, _guardian, _management);
+    }
+
+
     /**
      * @notice Initializes the Vault. Can only be called once.
      * @dev Sets token, governance, management, rewards, and guardian addresses.
@@ -310,18 +322,18 @@ contract StMNT is IERC20, ReentrancyGuard{
         address _token,
         address _governance,
         address _rewards,
-        string calldata _nameOverride,
-        string calldata _symbolOverride,
+        string memory _nameOverride,
+        string memory _symbolOverride,
         address _guardian,
         address _management
-    ) external {
+    ) internal {
         require(activation == 0, "Vault: already initialized");
 
         token = IERC20(_token);
 
         if (bytes(_nameOverride).length == 0) {
             name = string(
-                abi.encodePacked("st",IDetailedERC20(_token).symbol())
+                abi.encodePacked("st", IDetailedERC20(_token).symbol())
             );
         } else {
             name = _nameOverride;
@@ -932,7 +944,7 @@ contract StMNT is IERC20, ReentrancyGuard{
      * @param _shares Number of Vault shares.
      * return Value in underlying tokens.
      */
-    function _shareValue(uint256 _shares) internal view returns (uint256 ) {
+    function _shareValue(uint256 _shares) internal view returns (uint256) {
         if (totalSupply == 0) return _shares;
         return (_shares * _freeFunds()) / totalSupply;
     }
@@ -942,7 +954,9 @@ contract StMNT is IERC20, ReentrancyGuard{
      * @param _amount Amount of underlying tokens.
      * @return _number of Vault shares.
      */
-    function _sharesForAmount(uint256 _amount) internal view returns (uint256 _number) {
+    function _sharesForAmount(
+        uint256 _amount
+    ) internal view returns (uint256 _number) {
         uint256 _free = _freeFunds();
         if (_free > 0) {
             return _number = (_amount * totalSupply) / _free;
@@ -1389,12 +1403,10 @@ contract StMNT is IERC20, ReentrancyGuard{
     }
 
     /**
-     * @notice Returns debt outstanding for a strategy.
+     * @notice Returns debt outstanding for the caller strategy.
      */
-    function debtOutstanding(
-        address _strategy
-    ) external view returns (uint256) {
-        return _debtOutstanding(_strategy);
+    function debtOutstanding() external view returns (uint256) {
+        return _debtOutstanding(msg.sender);
     }
 
     /**

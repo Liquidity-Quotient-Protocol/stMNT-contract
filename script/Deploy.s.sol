@@ -15,15 +15,10 @@ contract Deploy is Script {
         uint256 ownerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(ownerPrivateKey);
 
-        StMNT stMNT = new StMNT();
+
         Liquid LIQ = new Liquid(owner);
         MockWnt mockWnt = new MockWnt(owner);
-
-        mockWnt.mint(owner, 1_000_000 ether);
-
-        address token = address(mockWnt);
-
-        stMNT.initialize(
+        StMNT stMNT = new StMNT(
             address(0xc0205beC85Cbb7f654c4a35d3d1D2a96a2217436),
             owner,
             owner,
@@ -32,6 +27,13 @@ contract Deploy is Script {
             owner,
             owner
         );
+    
+
+        mockWnt.mint(owner, 1_000_000 ether);
+
+        address token = address(mockWnt);
+
+ 
 
         stMNT.setPerformanceFee(0);
         stMNT.setManagementFee(0);
