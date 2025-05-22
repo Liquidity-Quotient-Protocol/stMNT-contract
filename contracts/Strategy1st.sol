@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
-
+import { console} from "forge-std/Test.sol";
 // These are the core Yearn libraries
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
@@ -325,6 +325,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         }
         balanceShare -= share;
         uint _returnamount = withdrawInit(lendingPool, share, address(this));
+        console.log("Ecco quando ritorna -> ",_returnamount);
         require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
         returnAmount = _amount;
         _loss = 0;

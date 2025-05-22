@@ -148,16 +148,21 @@ contract VaultTest is Test {
         strategy1st.harvest();
         vm.stopPrank();
 
-        /*
         assertEq(shares, 1000 ether);
         assertEq(vault.pricePerShare(), 1 ether);
-        vault.approve(address(vault), 1 ether);
+
+        vm.startPrank(user1);
+        vault.approve(address(vault), 1000 ether);
         uint256 assets = vault.withdraw(shares, user1, 100);
         assertEq(assets, 1000 ether);
+        vault.withdraw(shares, user1, 100);
+        vm.stopPrank();
 
+
+        /*
         vault.approve(address(vault), 1 ether);
         vm.expectRevert();
-        vault.withdraw(shares, user1, 100);*/
+        */
     }
 
     function testAllTogether() public {
