@@ -19,7 +19,7 @@ import {Lendl} from "./DefiProtocol/LendlProt.sol";
 import {IProtocolDataProvider, ILendingPool} from "./interface/ILendl.sol";
 import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol";
 
-contract Strategy1st is BaseStrategy, Ownable, Lendl {
+contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     using SafeERC20 for IERC20;
     using SafeERC20v4 for IERC20v4; 
     using Address for address;

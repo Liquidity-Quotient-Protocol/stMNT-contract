@@ -27,7 +27,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
 
     address public immutable _initAddr =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
-    address public immutable WMNT = 0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
+    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8; 
     address public lendingPool; //0x44949636f778fAD2b139E665aee11a2dc84A2976
     uint private balanceShare;
 
@@ -54,6 +54,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
+            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
             SafeERC20v4.safeApprove(
                 IERC20v4(want),
                 address(vault),
@@ -70,6 +71,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function updateUnlimitedSpendingInit(bool _approve) external onlyOwner {
         if (_approve) {
+            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
             SafeERC20v4.safeApprove(
                 IERC20v4(want),
                 _initAddr,
@@ -348,4 +350,6 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     function getCurrentDebtValue() external view returns (uint256) {
         return ILendingPool(lendingPool).debtShareToAmtStored(balanceShare);
     }
+
+
 }
