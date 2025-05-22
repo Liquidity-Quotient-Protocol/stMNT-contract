@@ -7,18 +7,22 @@ pragma experimental ABIEncoderV2;
 // These are the core Yearn libraries
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol";
+import {IERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {IERC20 as IERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20 as SafeERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {Iinit} from "./DefiProtocol/InitProt.sol";
 import {IInitCore} from "./interface/IInitCore.sol";
 import {IInitCore, ILendingPool} from "./interface/IInitCore.sol";
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol";
 
 contract Strategy1st is BaseStrategy, Iinit, Ownable {
     using SafeERC20 for IERC20;
+    using SafeERC20v4 for IERC20v4; 
     using Address for address;
 
     address public immutable _initAddr =
@@ -50,13 +54,13 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
-            SafeERC20.safeIncreaseAllowance(
-                IERC20(want),
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
                 address(vault),
                 type(uint256).max
             );
         } else {
-            SafeERC20.forceApprove(IERC20(want), address(vault), 0);
+            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
         }
     }
 
@@ -66,13 +70,13 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function updateUnlimitedSpendingInit(bool _approve) external onlyOwner {
         if (_approve) {
-            SafeERC20.safeIncreaseAllowance(
-                IERC20(want),
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
                 _initAddr,
                 type(uint256).max
             );
         } else {
-            SafeERC20.forceApprove(IERC20(want), _initAddr, 0);
+            SafeERC20v4.safeApprove(IERC20v4(want), _initAddr, 0);
         }
     }
 

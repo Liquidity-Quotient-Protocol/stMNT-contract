@@ -1,4 +1,5 @@
-@openzeppelin/=lib/openzeppelin-contracts/
 @yearnvaults/=lib/yearn-vaults/
-
+@openzeppelin-contract@5.3.0/=lib/openzeppelin-contracts/
+@openzeppelin-contracts@4.7.1/=lib/openzeppelin-contracts@v4.7.1/
+@openzeppelin-contracts@4.5.0/=lib/openzeppelin-contracts@v4.5.0/
 

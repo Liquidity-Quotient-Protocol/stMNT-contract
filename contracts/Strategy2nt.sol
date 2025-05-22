@@ -7,16 +7,21 @@ pragma experimental ABIEncoderV2;
 // These are the core Yearn libraries
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol";
+import {IERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {IERC20 as IERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20 as SafeERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/utils/SafeERC20.sol";
+
 
 import {Lendl} from "./DefiProtocol/LendlProt.sol";
 import {IProtocolDataProvider, ILendingPool} from "./interface/ILendl.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol";
 
 contract Strategy1st is BaseStrategy, Ownable, Lendl {
     using SafeERC20 for IERC20;
+    using SafeERC20v4 for IERC20v4; 
     using Address for address;
 
     address public immutable lendlAddress =
@@ -57,13 +62,13 @@ contract Strategy1st is BaseStrategy, Ownable, Lendl {
      */
     function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
-            SafeERC20.safeIncreaseAllowance(
-                IERC20(want),
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
                 address(vault),
                 type(uint256).max
             );
         } else {
-            SafeERC20.forceApprove(IERC20(want), address(vault), 0);
+            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
         }
     }
 
@@ -73,13 +78,13 @@ contract Strategy1st is BaseStrategy, Ownable, Lendl {
      */
     function updateUnlimitedSpendingLendl(bool _approve) external onlyOwner {
         if (_approve) {
-            SafeERC20.safeIncreaseAllowance(
-                IERC20(want),
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
                 lendlAddress,
                 type(uint256).max
             );
         } else {
-            SafeERC20.forceApprove(IERC20(want), lendingPool, 0);
+            SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
         }
     }
 
