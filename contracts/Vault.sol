@@ -333,7 +333,7 @@ contract StMNT is IERC20, ReentrancyGuard {
 
         if (bytes(_nameOverride).length == 0) {
             name = string(
-                abi.encodePacked("st", IDetailedERC20(_token).symbol())
+                string.concat("st", IDetailedERC20(_token).name())
             );
         } else {
             name = _nameOverride;
@@ -341,7 +341,7 @@ contract StMNT is IERC20, ReentrancyGuard {
 
         if (bytes(_symbolOverride).length == 0) {
             symbol = string(
-                abi.encodePacked("st", IDetailedERC20(_token).symbol())
+                string.concat("st", IDetailedERC20(_token).symbol())
             );
         } else {
             symbol = _symbolOverride;
