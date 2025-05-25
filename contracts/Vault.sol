@@ -3,7 +3,8 @@ pragma solidity ^0.8.20;
 
 /// @title Vault Interface Definitions and Storage for Forked Yearn V2 Vault
 /// @notice Defines constants, interfaces, and storage layout for the Vault contract.
-
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -33,7 +34,7 @@ interface IStrategy {
 /**
  * @dev Main Vault Contract
  */
-contract StMNT is IERC20, ReentrancyGuard {
+contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
     // ========================== Constants ===============================
 
     /// @notice Version identifier of the Vault API
@@ -385,30 +386,13 @@ contract StMNT is IERC20, ReentrancyGuard {
         return API_VERSION;
     }
 
-    /**
-     * @notice Computes the EIP-712 domain separator for signatures.
-     * @dev Internal helper to calculate DOMAIN_SEPARATOR.
-     * return The domain separator as bytes32.
-     */
-    function _domainSeparator() internal view returns (bytes32) {
-        return
-            keccak256(
-                abi.encodePacked(
-                    DOMAIN_TYPE_HASH,
-                    keccak256(bytes("Steaking Token")),
-                    keccak256(bytes(API_VERSION)),
-                    bytes32(block.chainid),
-                    bytes32(uint256(uint160(address(this))))
-                )
-            );
-    }
 
     /**
      * @notice Exposes the domain separator publicly.
      * return The domain separator as bytes32.
      */
     function DOMAIN_SEPARATOR() external view returns (bytes32) {
-        return _domainSeparator();
+        return _domainSeparatorV4();
     }
 
     /**
@@ -796,30 +780,15 @@ contract StMNT is IERC20, ReentrancyGuard {
         require(_owner != address(0), "Vault: invalid owner");
         require(_expiry >= block.timestamp, "Vault: expired permit");
 
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                _domainSeparator(),
-                keccak256(
-                    abi.encode(
-                        PERMIT_TYPE_HASH,
-                        _owner,
-                        _spender,
-                        _amount,
-                        nonces[_owner],
-                        _expiry
-                    )
-                )
-            )
-        );
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPE_HASH, _owner, _spender, _amount, nonces[_owner], _expiry));
 
-        require(
-            ecrecover(digest, _v, _r, _s) == _owner,
-            "Vault: invalid signature"
-        );
+        bytes32 hash_ = _hashTypedDataV4(structHash);
+        address signer_ = ECDSA.recover(hash_, _v, _r, _s);
 
-        allowance[_owner][_spender] = _amount;
+        require(signer_ == _owner, "Vault: invalid signature");
+
         nonces[_owner] += 1;
+        allowance[_owner][_spender] = _amount;
 
         emit Approval(_owner, _spender, _amount);
         return true;
