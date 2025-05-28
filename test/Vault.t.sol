@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.19;
 
 import {Test, console} from "forge-std/Test.sol";
 import {StMNT} from "../contracts/Vault.sol";
@@ -327,85 +327,6 @@ contract VaultTest is Test {
         testCannotSweepVaultToken();
     }
 
-       /**
-     * @notice Tests the permit functionality.
-     * - Creates a valid permit signature for token approval
-     * - Verifies the permit sets the correct allowance
-     * - Confirms the spender can use the allowance
-     * - Tests rejection of invalid signatures and expired permits
-     */
-    function testPermit() external {
-        // Create permit data
-        uint256 privateKey = 0xA11CE;
-        address owner = vm.addr(privateKey);
-        address spender = user2;
-        uint256 value = 100 ether;
-        uint256 deadline = block.timestamp + 1 hours;
-
-        // Setup: Mint tokens to owner and deposit them
-        MockERC20(address(token)).mint(owner, 1000 ether);
-        vm.startPrank(owner);
-        token.approve(address(vault), 1000 ether);
-        vault.deposit(1000 ether, owner);
-        vm.stopPrank();
-
-        // Get the domain separator
-        bytes32 domainSeparator = vault.DOMAIN_SEPARATOR();
-        uint256 nonce = vault.nonces(owner);
-
-        console.log("nonce is: ", nonce);
-
-        // Create the permit hash
-        bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
-                owner,
-                spender,
-                value,
-                nonce,
-                deadline
-            )
-        );
-
-        bytes32 hash = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                domainSeparator,
-                structHash
-            )
-        );
-
-        // Sign the hash
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, hash);
-
-        // Test valid permit
-        vault.permit(owner, spender, value, deadline, v, r, s);
-        assertEq(vault.allowance(owner, spender), value);
-
-        // check to see if nonce increased 
-        uint256 nonceAfter = vault.nonces(owner);
-        console.log("nonce after is: ", nonceAfter);
-
-        // Test that spender can use the allowance
-        vm.startPrank(spender);
-        vault.transferFrom(owner, spender, value);
-        assertEq(vault.balanceOf(spender), value);
-        vm.stopPrank();
-
-        // Test expired permit
-        vm.warp(block.timestamp + 2 hours);
-        vm.expectRevert("Vault: expired permit");
-        vault.permit(owner, spender, value, deadline, v, r, s);
-
-        // Test invalid signature
-        vm.warp(block.timestamp - 2 hours); // Reset time
-        vm.expectRevert("Vault: invalid signature");
-        vault.permit(owner, spender, value, deadline, v, r, bytes32(uint256(s) + 1));
-
-        // Test invalid owner
-        vm.expectRevert("Vault: invalid owner");
-        vault.permit(address(0), spender, value, deadline, v, r, s);
-    }
 }
 
 

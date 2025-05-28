@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.19;
+
+import { console} from "forge-std/Test.sol";
 
 /// @title Vault Interface Definitions and Storage for Forked Yearn V2 Vault
 /// @notice Defines constants, interfaces, and storage layout for the Vault contract.
@@ -1018,15 +1020,22 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
                 uint256 withdrawn = token.balanceOf(address(this)) - preBalance;
 
                 vaultBalance += withdrawn;
-
                 if (loss > 0) {
                     value -= loss;
                     totalLoss += loss;
                     _reportLoss(strategy, loss);
                 }
 
+             
+
+                uint256 debtRepayment = _min(withdrawn, strategies[strategy].totalDebt);
+                strategies[strategy].totalDebt -= debtRepayment;
+                totalDebt -= debtRepayment;
+                
+                /*
                 strategies[strategy].totalDebt -= withdrawn;
                 totalDebt -= withdrawn;
+                */
 
                 emit WithdrawFromStrategy(
                     strategy,

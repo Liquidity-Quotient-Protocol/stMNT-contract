@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.3.0) (access/manager/AuthorityUtils.sol)
 
-pragma solidity ^0.8.20;
+pragma solidity 0.8.19;
 
 import {IAuthority} from "./IAuthority.sol";
 

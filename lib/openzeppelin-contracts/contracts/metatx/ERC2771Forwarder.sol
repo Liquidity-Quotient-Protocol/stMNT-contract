@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // OpenZeppelin Contracts (last updated v5.3.0) (metatx/ERC2771Forwarder.sol)
 
-pragma solidity ^0.8.20;
+pragma solidity 0.8.19;
 
 import {ERC2771Context} from "./ERC2771Context.sol";
 import {ECDSA} from "../utils/cryptography/ECDSA.sol";
@@ -362,7 +362,7 @@ contract ERC2771Forwarder is EIP712, Nonces {
         // the forwarding does not revert.
         if (gasLeft < request.gas / 63) {
             // We explicitly trigger invalid opcode to consume all gas and bubble-up the effects, since
-            // neither revert or assert consume all gas since Solidity 0.8.20
+            // neither revert or assert consume all gas since Solidity ^0.8.19
             // https://docs.soliditylang.org/en/v0.8.20/control-structures.html#panic-via-assert-and-error-via-require
             assembly ("memory-safe") {
                 invalid()

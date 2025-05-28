@@ -173,12 +173,9 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
             _liquidatedAmount = _amountNeeded;
             _loss = 0;
         } else {
+            
             (_liquidatedAmount, _loss) = _withdrawSingleAmount(_amountNeeded);
         }
-
-        //! vincoli (solo per sviluppare ora )
-        //! require(want.balanceOf(address(this)) >= _liquidatedAmount);
-        //! require(_liquidatedAmount + _loss <= _amountNeeded);
     }
 
     /**
@@ -312,10 +309,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         uint256 _amount
     ) internal returns (uint256 returnAmount, uint256 _loss) {
         // QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
-        uint256 share = ILendingPool(lendingPool).debtAmtToShareCurrent(
+        uint256 share = ILendingPool(lendingPool).toShares(
             _amount
         );
-        if (share >= balanceShare) {
+        if (share < balanceShare) {
             emit ProblemWithWithdrawStrategy(
                 block.timestamp,
                 share,
@@ -324,10 +321,9 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
             revert("ProblemWithWithdrawStrategy");
         }
         balanceShare -= share;
-        uint _returnamount = withdrawInit(lendingPool, share, address(this));
-        console.log("Ecco quando ritorna -> ",_returnamount);
-        require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
-        returnAmount = _amount;
+        returnAmount = withdrawInit(lendingPool, share, address(this));
+        require(returnAmount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
+          
         _loss = 0;
     }
 

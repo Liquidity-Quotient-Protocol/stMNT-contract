@@ -5,6 +5,7 @@ libs = ["lib"]
 test = "test"
 optimizer = true
 optimizer_runs = 200
+solc = "0.8.19"
 rpc_endpoints = { mantle = "https://rpc.mantle.xyz" }
 
 [profile.release]

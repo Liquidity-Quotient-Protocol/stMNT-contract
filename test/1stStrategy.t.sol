@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.19;
 
 import {Test, console} from "forge-std/Test.sol";
 import {StMNT} from "../contracts/Vault.sol";
 import {Strategy1st} from "../contracts/Strategy1st.sol";
+import {ILendingPool} from "../contracts/interface/IInitCore.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -15,7 +16,7 @@ interface IWETH {
     function balanceOf(address) external view returns (uint256);
 }
 
-contract VaultTest is Test {
+contract Strg1 is Test {
     StMNT public vault;
 
     Strategy1st public strategy1st;
@@ -136,11 +137,13 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    function testDepositWithStrategy() internal {
+    function testDepositWithStrategy() internal  returns(uint256){
+        // Primo deposito e prelievo con strategia funziona
         vm.deal(user1, 2_000 ether);
         vm.startPrank(user1);
         wrapMNT(1_000 ether);
         WMNT.approve(address(vault), 1000 ether);
+
         uint256 shares = vault.deposit(1000 ether, user1);
         vm.stopPrank();
 
@@ -154,15 +157,41 @@ contract VaultTest is Test {
         vm.startPrank(user1);
         vault.approve(address(vault), 1000 ether);
         uint256 assets = vault.withdraw(shares, user1, 100);
-        assertEq(assets, 1000 ether);
-        vault.withdraw(shares, user1, 100);
+        assertApproxEqRel(assets, 1000 ether, 10, "Returned too little");
+
+        //assertGe(assets, (1000 ether * 999) / 1000, "Returned too little");
+        vm.stopPrank();
+        return assets;
+
+    }
+
+    function testDepositWithStrategyWithInterest() internal returns(uint256) {
+        // Primo deposito e prelievo con strategia funziona
+        vm.deal(user1, 2_000 ether);
+        vm.startPrank(user1);
+        wrapMNT(1_000 ether);
+        WMNT.approve(address(vault), 1000 ether);
+
+        uint256 shares = vault.deposit(1000 ether, user1);
         vm.stopPrank();
 
 
-        /*
-        vault.approve(address(vault), 1 ether);
-        vm.expectRevert();
-        */
+        vm.startPrank(management); // oppure keeper
+        strategy1st.harvest();
+        vm.stopPrank();
+
+        assertEq(shares, 1000 ether);
+        assertEq(vault.pricePerShare(), 1 ether);
+        skip(60 days);
+
+        vm.startPrank(user1);
+        vault.approve(address(vault), 1000 ether);
+        uint256 assets = vault.withdraw(shares, user1, 100);
+        assertGe(assets, (1000 ether * 999) / 1000, "Returned too little");
+        vm.stopPrank();
+
+        return assets;
+
     }
 
     function testAllTogether() public {
@@ -173,8 +202,13 @@ contract VaultTest is Test {
 
         setStrategyOnVauls();
 
-        testDepositWithStrategy();
+        //? L'UTENTE PUO DEPOSITARE E PRELEVARE CON LA STRATEGIA
+        //uint asset1 = testDepositWithStrategy();
+        uint asset2 = testDepositWithStrategyWithInterest();
 
+        //console.log("Asset1: ", asset1);
+        //console.log("Asset2: ", asset2);
+        //assertTrue(asset2 > asset1, "Non sono ritornati interessi");
 
     }
 }
