@@ -63,6 +63,8 @@ interface ILendingPool {
     function toAmt(uint _shares) external view returns (uint256 _amt);
     function toShares(uint _amt) external view returns (uint256 _shares);
     function balanceOf(address user) external view returns (uint256);
+    function toAmtCurrent(uint _shares) external returns (uint256 _amt);
+    function accrueInterest() external ;
 }
 
 interface ILBFactory {

@@ -990,6 +990,8 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
 
         require(_maxLoss <= MAX_BPS, "Vault: max loss too high");
 
+
+
         if (shares == type(uint256).max) {
             shares = balanceOf[msg.sender];
         }
@@ -1556,10 +1558,6 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         require(params.activation > 0, "Vault: !approved strategy");
 
         // Sanity check balances
-        //console.log(" token.balanceOf(msg.sender) : %s", token.balanceOf(msg.sender));
-        //console.log(" _gain : %s", _gain);
-        //console.log(" _debtPayment : %s", _debtPayment);
-        //console.log("_gain + _debtPayment ->",_gain + _debtPayment);
 
         require(
             token.balanceOf(msg.sender) >= _gain + _debtPayment,
@@ -1592,10 +1590,9 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         uint256 totalAvailable = _gain + debtPayment;
 
         if (totalAvailable < credit) {
-        console.log("QUI CI SONO ?! Report");
             totalIdle -= (credit - totalAvailable);
             token.safeTransfer(msg.sender, credit - totalAvailable);
-        } else if (totalAvailable > credit) {
+        } else if (totalAvailable > credit) {   
             totalIdle += (totalAvailable - credit);
             token.safeTransferFrom(
                 msg.sender,
