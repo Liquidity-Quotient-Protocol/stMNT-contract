@@ -1556,11 +1556,16 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         require(params.activation > 0, "Vault: !approved strategy");
 
         // Sanity check balances
+        //console.log(" token.balanceOf(msg.sender) : %s", token.balanceOf(msg.sender));
+        //console.log(" _gain : %s", _gain);
+        //console.log(" _debtPayment : %s", _debtPayment);
+        //console.log("_gain + _debtPayment ->",_gain + _debtPayment);
+
         require(
             token.balanceOf(msg.sender) >= _gain + _debtPayment,
             "Vault: insufficient balance"
         );
-
+        
         if (_loss > 0) {
             _reportLoss(msg.sender, _loss);
         }
@@ -1587,6 +1592,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         uint256 totalAvailable = _gain + debtPayment;
 
         if (totalAvailable < credit) {
+        console.log("QUI CI SONO ?! Report");
             totalIdle -= (credit - totalAvailable);
             token.safeTransfer(msg.sender, credit - totalAvailable);
         } else if (totalAvailable > credit) {

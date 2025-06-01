@@ -122,6 +122,8 @@ contract Strg1 is Test {
         );
         strategy1st.updateUnlimitedSpending(true);
         strategy1st.updateUnlimitedSpendingInit(true);
+        strategy1st.approveLendingPool();
+        vm.stopPrank();
     }
 
     function setStrategyOnVauls() internal {
@@ -184,6 +186,18 @@ contract Strg1 is Test {
         assertEq(vault.pricePerShare(), 1 ether);
         skip(60 days);
 
+         vm.startPrank(management); // oppure keeper
+        strategy1st.harvest();
+        vm.stopPrank();
+        skip(8 hours);
+        ///assertGe(vault.pricePerShare(), 1 ether,"VAlue share not updated");
+
+        vm.startPrank(management); // oppure keeper
+        strategy1st.harvest();
+        vm.stopPrank();
+        skip(8 hours);
+
+
         vm.startPrank(user1);
         vault.approve(address(vault), 1000 ether);
         uint256 assets = vault.withdraw(shares, user1, 100);
@@ -203,12 +217,12 @@ contract Strg1 is Test {
         setStrategyOnVauls();
 
         //? L'UTENTE PUO DEPOSITARE E PRELEVARE CON LA STRATEGIA
-        //uint asset1 = testDepositWithStrategy();
+        uint asset1 = testDepositWithStrategy();
         uint asset2 = testDepositWithStrategyWithInterest();
 
         //console.log("Asset1: ", asset1);
         //console.log("Asset2: ", asset2);
-        //assertTrue(asset2 > asset1, "Non sono ritornati interessi");
+        assertTrue(asset2 > asset1, "Non sono ritornati interessi");
 
     }
 }

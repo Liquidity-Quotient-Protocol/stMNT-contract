@@ -60,8 +60,8 @@ interface ILendingPool {
     function debtShareToAmtCurrent(
         uint256 shares
     ) external returns (uint256 amount);
-    function toAmt(uint _shares) external returns (uint256 _amt);
-    function toShares(uint _amt) external returns (uint256 _shares);
+    function toAmt(uint _shares) external view returns (uint256 _amt);
+    function toShares(uint _amt) external view returns (uint256 _shares);
     function balanceOf(address user) external view returns (uint256);
 }
 
