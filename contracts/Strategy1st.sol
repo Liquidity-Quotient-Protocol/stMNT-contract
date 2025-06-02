@@ -363,10 +363,14 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
      */
     function _totalRecall() internal returns (bool success) {
         // semplicemente chiamiamo tutti i fondi dalle varie piattaforme
-        uint _amount = ILendingPool(lendingPool).debtShareToAmtCurrent(
-            balanceShare
-        );
-        _withdrawSingleAmount(_amount);
+
+        require(balanceShare== ILendingPool(lendingPool).balanceOf(address(this)), "Balance share mismatch");
+        ILendingPool(lendingPool).accrueInterest();
+        uint _amount = ILendingPool(lendingPool).toAmt(balanceShare);
+        console.log("balanceShare %u", balanceShare);
+        console.log("_amount to withdraw: %u", _amount);
+
+        liquidatePosition(_amount);
         success = true;
     }
 

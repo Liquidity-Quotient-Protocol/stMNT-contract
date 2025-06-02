@@ -1311,7 +1311,6 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
             "Vault: !authorized"
         );
         require(strategies[_strategy].debtRatio != 0, "Vault: already revoked");
-
         _revokeStrategy(_strategy);
     }
     /**
