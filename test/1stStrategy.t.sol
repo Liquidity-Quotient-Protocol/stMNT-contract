@@ -74,7 +74,6 @@ contract Strg1 is Test {
     }
 
     function testInitialize() internal {
-        // ... (il tuo testInitialize rimane invariato) ...
         vm.startPrank(governance);
         assertEq(vault.governance(), governance);
         assertEq(vault.management(), management);
@@ -84,14 +83,13 @@ contract Strg1 is Test {
         assertEq(vault.symbol(), "stMNT");
         assertEq(address(vault.token()), address(WMNT));
 
-        // Le fee sono già state impostate a 0 in setUp() per i test di logica degli interessi
-        assertEq(vault.performanceFee(), 0); // Modificato per riflettere setUp
-        assertEq(vault.managementFee(), 0); // Modificato per riflettere setUp
-        assertEq(vault.lockedProfitDegradation(), 46000000000000); // Valore di default
+        assertEq(vault.performanceFee(), 0); 
+        assertEq(vault.managementFee(), 0); 
+        assertEq(vault.lockedProfitDegradation(), 46000000000000); 
 
-        // vault.setDepositLimit(1_000_000 ether); // Già fatto in setUp
+ 
 
-        assertEq(vault.depositLimit(), type(uint256).max); // Modificato
+        assertEq(vault.depositLimit(), type(uint256).max); 
 
         vm.stopPrank();
         vm.startPrank(user1);
@@ -103,20 +101,17 @@ contract Strg1 is Test {
     }
 
     function testDepositAndWithdraw_NoStrategy() internal {
-        // Rinominato per chiarezza
+
         vm.deal(user1, 2_000 ether);
         vm.startPrank(user1);
         assertEq(user1.balance, 2_000 ether);
         wrapMNT(1_000 ether);
         WMNT.approve(address(vault), 1000 ether);
 
-        // Rimuoviamo temporaneamente la strategia per testare il deposito/prelievo base del vault
         vm.startPrank(governance);
         vm.startPrank(governance);
-        // Dichiara una variabile locale del tipo StMNT.StrategyParams
         vm.startPrank(governance);
 
-        // Destruttura la tupla restituita da vault.strategies()
         (
             uint256 performanceFee, // Ignoreremo questo per ora se non serve
             uint256 activation, // Ignoreremo questo
@@ -129,7 +124,6 @@ contract Strg1 is Test {
             uint256 totalLoss // Ignoreremo questo
         ) = vault.strategies(address(strategy1st));
 
-        // Ora puoi usare la variabile originalDebtRatio
         vault.updateStrategyDebtRatio(address(strategy1st), 0); // Disattiva la strategia
         vm.stopPrank();
         vault.updateStrategyDebtRatio(address(strategy1st), 0); // Disattiva la strategia
@@ -141,17 +135,13 @@ contract Strg1 is Test {
         assertEq(shares, 1000 ether);
         assertEq(vault.pricePerShare(), 1 ether); // Senza strategia attiva, PPS dovrebbe essere 1
 
-        // Non serve vault.approve per prelevare le proprie quote
-        // vault.approve(address(vault), 1 ether);
         uint256 assets = vault.withdraw(shares, user1, 0); // maxLoss a 0
         assertEq(assets, 1000 ether);
 
-        // vault.approve(address(vault), 1 ether);
         vm.expectRevert(); // Dovrebbe fallire perché l'utente non ha più quote
         vault.withdraw(1, user1, 0); // Tenta di prelevare 1 quota
         vm.stopPrank();
 
-        // Ripristina la strategia
         vm.startPrank(governance);
         vault.updateStrategyDebtRatio(address(strategy1st), originalDebtRatio);
         vm.stopPrank();
@@ -219,7 +209,6 @@ contract Strg1 is Test {
         uint256 pricePerShare_AfterInterest;
         uint256 assetsWithdrawn;
 
-        // 1. DEPOSITO UTENTE
         vm.deal(user1, depositAmount * 2);
         vm.startPrank(user1);
         wrapMNT(depositAmount);
@@ -232,7 +221,6 @@ contract Strg1 is Test {
         );
         vm.stopPrank();
 
-        // 2. PRIMO HARVEST (per spostare fondi nella strategia)
         vm.startPrank(management);
         strategy1st.harvest();
         vm.stopPrank();
@@ -242,10 +230,7 @@ contract Strg1 is Test {
             "PricePerShare after 1st harvest (before interest): %s",
             pricePerShare_BeforeInterest
         );
-        // Qui il PPS potrebbe essere ancora vicino a 1e18 o leggermente diverso se il vault ha
-        // immediatamente trasferito fondi e questo ha avuto un impatto (improbabile senza profitti).
 
-        // Log per vedere lo stato della strategia dopo il primo harvest
         uint strategyWantBalance = WMNT.balanceOf(address(strategy1st));
         uint strategySharesInLP = ILendingPool(LENDING_POOL_ADDRESS).balanceOf(
             address(strategy1st)
@@ -268,19 +253,14 @@ contract Strg1 is Test {
             );
         }
 
-        // 3. SIMULAZIONE PASSAGGIO DEL TEMPO E ACCUMULO INTERESSI
         uint timeToSkip = 60 days;
         skip(timeToSkip);
         console.log("Skipped %s seconds.", timeToSkip);
 
-        // È FONDAMENTALE chiamare accrueInterest sul LendingPool DOPO lo skip e PRIMA del harvest della strategia
-        // Questo aggiorna lo stato interno del LendingPool (es. totalDebt) per riflettere gli interessi.
         ILendingPool(LENDING_POOL_ADDRESS).accrueInterest();
         console.log("Called accrueInterest() on LendingPool.");
 
-        // Opzionale: log del valore nel lending pool dopo accrue
         if (strategySharesInLP > 0) {
-            // Usa le shares di prima se non ci sono stati altri depositi/prelievi dalla strategia
             skip(10 hours);
             ILendingPool(LENDING_POOL_ADDRESS).accrueInterest();
             uint valueInLP_afterAccrue = ILendingPool(LENDING_POOL_ADDRESS)
@@ -292,12 +272,11 @@ contract Strg1 is Test {
             assertTrue(
                 valueInLP_afterAccrue > ((depositAmount * 99) / 100),
                 "Value in LP did not increase as expected after accrue."
-            ); // Aspettati un aumento
+            );
         }
 
-        // 4. SECONDO HARVEST (la strategia dovrebbe riportare i profitti)
         vm.startPrank(management);
-        strategy1st.harvest(); // Qui la strategia chiama prepareReturn -> _returnDepositPlatformValue
+        strategy1st.harvest();
         vm.stopPrank();
         skip(10 hours);
 
@@ -307,16 +286,14 @@ contract Strg1 is Test {
             pricePerShare_AfterInterest
         );
 
-        // ASSERT CHE IL PRICEPERSHARE SIA AUMENTATO
+      
         assertTrue(
             pricePerShare_AfterInterest > pricePerShare_BeforeInterest,
             "FAIL: PricePerShare did not increase after interest period and harvest."
         );
 
-        // 5. PRELIEVO UTENTE
+       
         vm.startPrank(user1);
-        // L'utente non ha bisogno di approvare il vault per prelevare le proprie quote
-        // vault.approve(address(vault), initialShares);
         assetsWithdrawn = vault.withdraw(initialShares, user1, 100); // maxLoss 0.01% = 10 BPS
         vm.stopPrank();
 
@@ -326,20 +303,12 @@ contract Strg1 is Test {
             initialShares
         );
 
-        // ASSERT CHE L'UTENTE ABBIA RICEVUTO PIÙ DI QUANTO DEPOSITATO
-        // (con una piccola tolleranza per sicurezza, anche se le fee sono a 0)
         uint expectedMinReturn = depositAmount + ((depositAmount * 1) / 10000); // Esempio: almeno 0.01% di profitto
-        // Questo expectedMinReturn è arbitrario, dipende da quanto interesse ti aspetti.
-        // Una verifica più robusta sarebbe calcolare l'interesse atteso.
-        // Per ora, verifichiamo solo che sia maggiore del deposito.
         assertTrue(
             assetsWithdrawn > depositAmount,
             "FAIL: Withdrawn assets are not greater than initial deposit."
         );
-        // Potresti anche volere un assertApproxEqRel se conosci il tasso di interesse atteso
-        // assertApproxEqRel(assetsWithdrawn, expectedAssetsWithInterest, 100);
 
-        // Log finali di bilancio come nel tuo codice
         console.log(
             "FINAL - Asset Vault (liquid WMNT): %s",
             WMNT.balanceOf(address(vault))

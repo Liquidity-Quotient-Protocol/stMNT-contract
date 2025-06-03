@@ -26,10 +26,45 @@ interface ILendingPool {
             uint256 ltv,
             uint256 healthFactor
         );
+
+    // *** QUESTA È LA FUNZIONE CHE CI SERVE! ***
+    function getReserveNormalizedIncome(address asset)
+        external
+        view
+        returns (uint256);
+
+    // Altre funzioni utili del LendingPool
+    function getReserveData(address asset)
+        external
+        view
+        returns (
+            uint256 configuration,
+            uint128 liquidityIndex,
+            uint128 variableBorrowIndex,
+            uint128 currentLiquidityRate,
+            uint128 currentVariableBorrowRate,
+            uint128 currentStableBorrowRate,
+            uint40 lastUpdateTimestamp,
+            address aTokenAddress,
+            address stableDebtTokenAddress,
+            address variableDebtTokenAddress,
+            address interestRateStrategyAddress,
+            uint8 id
+        );
 }
 
-
 interface IProtocolDataProvider {
+    // Questa funzione ESISTE nel DataProvider
+    function getReserveTokensAddresses(address asset)
+        external
+        view
+        returns (
+            address aTokenAddress,
+            address stableDebtTokenAddress,
+            address variableDebtTokenAddress
+        );
+
+    // Queste funzioni ESISTONO nel DataProvider
     function getUserReserveData(address asset, address user)
         external
         view
@@ -45,21 +80,19 @@ interface IProtocolDataProvider {
             bool usageAsCollateralEnabled
         );
 
-    /// @notice Returns the reserve data for an asset (like total supply and token addresses)
-    function getReserveTokensAddresses(address asset)
+    function getReserveData(address asset)
         external
         view
         returns (
-            address aTokenAddress,
-            address stableDebtTokenAddress,
-            address variableDebtTokenAddress
+            uint256 availableLiquidity,
+            uint256 totalStableDebt,
+            uint256 totalVariableDebt,
+            uint256 liquidityRate,
+            uint256 variableBorrowRate,
+            uint256 stableBorrowRate,
+            uint256 averageStableBorrowRate,
+            uint256 liquidityIndex,
+            uint256 variableBorrowIndex,
+            uint40 lastUpdateTimestamp
         );
-
-    /// @notice Returns the current normalized income of the reserve (1 aToken = this much underlying)
-    /// @dev Expressed in ray units (1e27)
-    function getReserveNormalizedIncome(address asset)
-        external
-        view
-        returns (uint256);
 }
-

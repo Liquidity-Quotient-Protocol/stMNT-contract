@@ -4,6 +4,7 @@
 pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
 
+import {console} from "forge-std/Test.sol";
 // These are the core Yearn libraries
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
@@ -20,34 +21,34 @@ import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol
 
 contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     using SafeERC20 for IERC20;
-    using SafeERC20v4 for IERC20v4; 
+    using SafeERC20v4 for IERC20v4;
     using Address for address;
 
-    address public immutable lendlAddress =
-        0x972BcB0284cca0152527c4f70f8F689852bCAFc5; //! mock
     address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8; // Fixed to real WMNT
     address public immutable lendlDataProvider =
-        0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
-    address public lendingPool; 
+        0x552b9e4bae485C4B7F540777d7D25614CdB84773;
+
+    address public constant lendingPool =
+        0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3;
     address public lToken;
 
     uint private balanceShare; // Tracks our lToken shares
+
+    address public lTokenWMNT; // Questo sarà l'lWMNT token
 
     // solhint-disable-next-line no-empty-blocks
     constructor(
         address _vault,
         address _owner
-    ) BaseStrategy(_vault) Ownable(_owner) {}
+    ) BaseStrategy(_vault) Ownable(_owner) {
+        (address aTokenAddress, , ) = IProtocolDataProvider(lendlDataProvider)
+            .getReserveTokensAddresses(WMNT);
+        lTokenWMNT = aTokenAddress;
+
+        IERC20(WMNT).approve(lendingPool, type(uint256).max);
+    }
 
     // Management functions
-    /**
-     * @notice Sets the address of the Lendle lending pool used by the strategy.
-     * @param _lendingPool Address of the lending pool contract.
-     */
-    function setLendingPool(address _lendingPool) external onlyOwner {
-        require(_lendingPool != address(0), "Set correct Address");
-        lendingPool = _lendingPool;
-    }
 
     function setlToken(address _lToken) external onlyOwner {
         require(_lToken != address(0), "Set correct Address");
@@ -99,34 +100,49 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
     function lTokenToWant(uint256 lTokenAmount) public view returns (uint256) {
         if (lTokenAmount == 0) return 0;
-        uint256 rate = IProtocolDataProvider(lendlDataProvider)
-            .getReserveNormalizedIncome(address(want));
-        return (lTokenAmount * rate) / 1e27;
+
+        // In Aave/Lendle, il tasso è normalizedIncome
+        uint256 rate = ILendingPool(lendingPool).getReserveNormalizedIncome(
+            address(want)
+        );
+        console.log("Rate:", rate);
+        return (lTokenAmount * rate) / 1e27; // Rate è in ray (1e27)
     }
 
     function wantToLToken(uint256 wantAmount) public view returns (uint256) {
         if (wantAmount == 0) return 0;
-        uint256 rate = IProtocolDataProvider(lendlDataProvider)
-            .getReserveNormalizedIncome(address(want));
+        uint256 rate = ILendingPool(lendingPool).getReserveNormalizedIncome(
+            WMNT
+        );
+
         require(rate > 0, "Invalid rate");
         return (wantAmount * 1e27) / rate;
     }
+
+
+    function verita()external view returns(uint256){
+          uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
+            address(this)
+        );
+        return actualLTokenBalance;
+    }
+
+
 
     /**
      * @notice Estimates the total assets held by the strategy in terms of `want`.
      * @return The estimated total value of managed assets.
      */
     function estimatedTotalAssets() public view override returns (uint256) {
-        // Verify our internal tracking matches actual lToken balance
-        uint256 actualLTokenBalance = IERC20(lToken).balanceOf(address(this));
-        require(
-            balanceShare == actualLTokenBalance,
-            "Balance share mismatch"
+        // Verifica che il nostro tracking interno sia corretto
+        uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
+            address(this)
         );
+        console.log("Effective lToken balance:", actualLTokenBalance);
+        uint256 valueInLending = lTokenToWant(actualLTokenBalance);
+        uint256 liquidWant = want.balanceOf(address(this));
 
-        uint256 wantConv = lTokenToWant(balanceShare);
-        uint256 wantBal = want.balanceOf(address(this));
-        return wantBal + wantConv;
+        return liquidWant + valueInLending;
     }
 
     /**
@@ -146,11 +162,16 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         // Get current profit/loss calculation
         (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
 
+
+
         // If we need to liquidate for the profit reporting
         if (want.balanceOf(address(this)) < _profit) {
             uint256 _amountNeeded = _profit - want.balanceOf(address(this));
-            (uint256 liquidated, uint256 loss) = liquidatePosition(_amountNeeded);
+            (uint256 liquidated, uint256 loss) = liquidatePosition(
+                _amountNeeded
+            );
             _loss += loss;
+
         }
 
         // Small rounding protection
@@ -164,11 +185,13 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @param _debtOutstanding Amount that may be withdrawn in the next harvest.
      */
     function adjustPosition(uint256 _debtOutstanding) internal override {
+
         uint256 _balanceInContract = want.balanceOf(address(this));
-        
+
         if (_balanceInContract > _debtOutstanding) {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
             bool success = _investInStrategy(_amountToInvest);
+
             require(success, "Error in invest");
         }
     }
@@ -283,39 +306,102 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function _investInStrategy(
         uint256 _amount
     ) internal returns (bool success) {
-        uint256 share = depositLendl(lendingPool, address(want), _amount, lToken);
-        balanceShare += share;
+        // Deposita WMNT e ricevi lWMNT
+        
+        uint256 balanceBefore = IERC20(lTokenWMNT).balanceOf(address(this));
+
+        ILendingPool(lendingPool).deposit(
+            WMNT, // asset to deposit
+            _amount, // amount
+            address(this), // onBehalfOf
+            0 // referralCode
+        );
+
+        uint256 balanceAfter = IERC20(lTokenWMNT).balanceOf(address(this));
+        require(balanceBefore<balanceAfter, "Deposit failed, no lTokens received");
         success = true;
     }
 
-    event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceShare);
+    event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceAfter);
 
-    /**
-     * @notice Withdraws a specific amount of `want` from Lendle.
-     * @param _amount Amount of `want` to retrieve.
-     * @return returnAmount Actual amount returned.
-     * @return _loss Any loss incurred during withdrawal.
-     */
+  
     function _withdrawSingleAmount(
-        uint256 _amount
-    ) internal returns (uint256 returnAmount, uint256 _loss) {
-        uint256 share = wantToLToken(_amount);
-        
-        if (share > balanceShare) {
-            emit ProblemWithWithdrawStrategy(
-                block.timestamp,
-                share,
-                balanceShare
-            );
-            revert("ProblemWithWithdrawStrategy");
+        uint256 _amountWantToWithdraw // Quantità di WMNT che si vuole prelevare
+    ) internal returns (uint256 actualAmountReceived, uint256 _loss) {
+        console.log(
+            "Strategy _withdrawSingleAmount: Inizio prelievo per %s want",
+            _amountWantToWithdraw
+        );
+
+        if (_amountWantToWithdraw == 0) {
+            return (0, 0);
         }
-        
-        balanceShare -= share;
-        uint256 _returnamount = withdrawLendl(lendingPool, lToken, share);
-        require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolerance 0.1%
-        
-        returnAmount = _amount;
-        _loss = 0;
+
+        uint256 lTokensHeldBeforeWithdraw = IERC20(lTokenWMNT).balanceOf(
+            address(this)
+        );
+
+        // Non possiamo prelevare più del valore delle quote che abbiamo.
+        uint256 maxValueOfOurLTokens = lTokenToWant(lTokensHeldBeforeWithdraw);
+        uint256 amountToActuallyAttemptWithdraw = _amountWantToWithdraw;
+
+        if (amountToActuallyAttemptWithdraw > maxValueOfOurLTokens) {
+            console.log(
+                "Strategy _withdrawSingleAmount: Richiesta di prelievo (%s) maggiore del valore delle quote (%s). Prelevo il massimo.",
+                amountToActuallyAttemptWithdraw,
+                maxValueOfOurLTokens
+            );
+            amountToActuallyAttemptWithdraw = maxValueOfOurLTokens;
+        }
+
+        if (
+            amountToActuallyAttemptWithdraw == 0 &&
+            lTokensHeldBeforeWithdraw > 0
+        ) {
+            // Abbiamo lTokens ma valgono 0. Per Aave, per ritirare lTokens con valore 0 (e bruciarli),
+            // si può chiamare withdraw con type(uint256).max per ritirare "tutto il possibile".
+            // Se il valore è davvero 0, actualAmountReceived sarà 0.
+            console.log(
+                "Strategy _withdrawSingleAmount: lTokens hanno valore 0, tentativo di ritirare tutto (type(uint256).max)."
+            );
+            actualAmountReceived = ILendingPool(lendingPool).withdraw(
+                WMNT,
+                type(uint256).max, // Tentativo di prelevare tutto l'underlying possibile per le quote detenute
+                address(this)
+            );
+        } else if (amountToActuallyAttemptWithdraw > 0) {
+            actualAmountReceived = ILendingPool(lendingPool).withdraw(
+                WMNT, // asset sottostante (WMNT)
+                amountToActuallyAttemptWithdraw, // quantità di WMNT da prelevare
+                address(this) // a chi inviare
+            );
+        } else {
+            // amountToActuallyAttemptWithdraw è 0 e lTokensHeldBeforeWithdraw è 0
+            actualAmountReceived = 0;
+        }
+
+        uint256 lTokensHeldAfterWithdraw = IERC20(lTokenWMNT).balanceOf(
+            address(this)
+        );
+   
+
+        // Calcola la perdita se abbiamo ricevuto meno di quanto tentato (con tolleranza)
+        if (
+            actualAmountReceived <
+            (amountToActuallyAttemptWithdraw * 999) / 1000
+        ) {
+            // Tolleranza 0.1%
+            _loss = amountToActuallyAttemptWithdraw - actualAmountReceived;
+        } else {
+            _loss = 0;
+        }
+
+        console.log(
+            "Strategy _withdrawSingleAmount: Ricevuti %s want, perdita calcolata: %s",
+            actualAmountReceived,
+            _loss
+        );
+        return (actualAmountReceived, _loss);
     }
 
     /**
@@ -323,10 +409,27 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return success Whether the recall was successful.
      */
     function _totalRecall() internal returns (bool success) {
-        if (balanceShare > 0) {
-            uint256 sharesToWithdraw = balanceShare;
-            uint256 amountReceived = withdrawLendl(lendingPool, lToken, sharesToWithdraw);
-            balanceShare = 0; // Reset after withdrawal
+      
+        uint256 currentActualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
+            address(this)
+        );
+    
+        if (currentActualLTokenBalance > 0) {
+            uint256 balanceWantBeforeWithdraw = want.balanceOf(address(this));
+
+            ILendingPool(lendingPool).withdraw(
+                WMNT, // L'asset sottostante (WMNT)
+                type(uint256).max, // Indica di prelevare tutto l'underlying possibile per le quote detenute
+                address(this) // A chi inviare i fondi
+            );
+
+            uint256 balanceWantAfterWithdraw = want.balanceOf(address(this));
+            uint256 amountEffectivelyWithdrawn = balanceWantAfterWithdraw -
+                balanceWantBeforeWithdraw;
+        } else {
+            console.log(
+                "Strategy _totalRecall: Nessuna balanceShare (lTokens) da prelevare."
+            );
         }
         success = true;
     }
@@ -336,7 +439,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return The amount of `want` represented by `balanceShare`.
      */
     function getCurrentDebtValue() external view returns (uint256) {
-        return lTokenToWant(balanceShare);
+        return lTokenToWant(IERC20(lTokenWMNT).balanceOf(address(this)));
     }
 
     /// @notice Returns the current lToken balance of the strategy
@@ -346,7 +449,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
     // TEST GETTERS (like Strategy1st)
     function getBalanceShare() external view returns (uint256) {
-        return balanceShare;
+        return IERC20(lTokenWMNT).balanceOf(address(this));
     }
 
     function getEmergencyExitFlag() external view returns (bool) {
