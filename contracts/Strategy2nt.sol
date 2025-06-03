@@ -14,7 +14,6 @@ import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/util
 import {IERC20 as IERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20 as SafeERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/utils/SafeERC20.sol";
 
-
 import {Lendl} from "./DefiProtocol/LendlProt.sol";
 import {IProtocolDataProvider, ILendingPool} from "./interface/ILendl.sol";
 import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol";
@@ -26,13 +25,13 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
     address public immutable lendlAddress =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5; //! mock
-    address public immutable WMNT = 0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
+    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8; // Fixed to real WMNT
     address public immutable lendlDataProvider =
         0x1234567890AbcdEF1234567890aBcdef12345678; //!mock
-    address public lendingPool; //0x44949636f778fAD2b139E665aee11a2dc84A2976
+    address public lendingPool; 
     address public lToken;
 
-    uint private balanceShare;
+    uint private balanceShare; // Tracks our lToken shares
 
     // solhint-disable-next-line no-empty-blocks
     constructor(
@@ -40,9 +39,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         address _owner
     ) BaseStrategy(_vault) Ownable(_owner) {}
 
-    // Funzioni per la gestione della strategia
+    // Management functions
     /**
-     * @notice Sets the address of the Init lending pool used by the strategy.
+     * @notice Sets the address of the Lendle lending pool used by the strategy.
      * @param _lendingPool Address of the lending pool contract.
      */
     function setLendingPool(address _lendingPool) external onlyOwner {
@@ -55,13 +54,13 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         lToken = _lToken;
     }
 
-    //Aggiornamento spesa manuale
     /**
      * @notice Updates unlimited spending allowance for the vault on the `want` token.
      * @param _approve If true, grants max allowance; otherwise revokes.
      */
     function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
+            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
             SafeERC20v4.safeApprove(
                 IERC20v4(want),
                 address(vault),
@@ -73,14 +72,15 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Updates unlimited spending allowance for Init on the `want` token.
+     * @notice Updates unlimited spending allowance for Lendle on the `want` token.
      * @param _approve If true, grants max allowance; otherwise revokes.
      */
     function updateUnlimitedSpendingLendl(bool _approve) external onlyOwner {
         if (_approve) {
+            SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
             SafeERC20v4.safeApprove(
                 IERC20v4(want),
-                lendlAddress,
+                lendingPool,
                 type(uint256).max
             );
         } else {
@@ -94,14 +94,22 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return The strategy's display name.
      */
     function name() external view override returns (string memory) {
-        // Add your own name here, suggestion e.g. "StrategyCreamYFI"
-        return "Strategy StMantle defi steaking Lendl deposit";
+        return "Strategy StMantle defi staking Lendle deposit";
     }
 
     function lTokenToWant(uint256 lTokenAmount) public view returns (uint256) {
+        if (lTokenAmount == 0) return 0;
         uint256 rate = IProtocolDataProvider(lendlDataProvider)
             .getReserveNormalizedIncome(address(want));
         return (lTokenAmount * rate) / 1e27;
+    }
+
+    function wantToLToken(uint256 wantAmount) public view returns (uint256) {
+        if (wantAmount == 0) return 0;
+        uint256 rate = IProtocolDataProvider(lendlDataProvider)
+            .getReserveNormalizedIncome(address(want));
+        require(rate > 0, "Invalid rate");
+        return (wantAmount * 1e27) / rate;
     }
 
     /**
@@ -109,9 +117,14 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return The estimated total value of managed assets.
      */
     function estimatedTotalAssets() public view override returns (uint256) {
-        //? Build a more accurate estimate using the value of all positions in terms of `want`
-        uint256 lTokenBalance = IERC20(lToken).balanceOf(address(this));
-        uint wantConv = lTokenToWant(lTokenBalance);
+        // Verify our internal tracking matches actual lToken balance
+        uint256 actualLTokenBalance = IERC20(lToken).balanceOf(address(this));
+        require(
+            balanceShare == actualLTokenBalance,
+            "Balance share mismatch"
+        );
+
+        uint256 wantConv = lTokenToWant(balanceShare);
         uint256 wantBal = want.balanceOf(address(this));
         return wantBal + wantConv;
     }
@@ -129,37 +142,35 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         internal
         override
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
-    // solhint-disable-next-line no-empty-blocks
     {
-        // TODO: Do stuff here to free up any returns back into `want`
-        // NOTE: Return `_profit` which is value generated by all positions, priced in `want`
-        // NOTE: Should try to free up at least `_debtOutstanding` of underlying position
-        uint256 _balanceInContract = want.balanceOf(address(this)); // vedo quanti token liberi  ho nella contratto della strategia
+        // Get current profit/loss calculation
         (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
-        if (_balanceInContract < _debtOutstanding) {
-            uint256 _amountToInvest = _balanceInContract - _debtOutstanding; // calcolo quanto posso investire
-            uint256 _amountReturn = _withdrawTokenFromStrategy(_amountToInvest); // prelevo i fondi dalla strategia
-            require(_amountReturn > _amountToInvest, "Error in withdraw"); // Per ora facciamo finta che i fondi debbano essere sempre uguali, ma potrebbe essere un bug in caSO DI PROblemi di liquidita
+
+        // If we need to liquidate for the profit reporting
+        if (want.balanceOf(address(this)) < _profit) {
+            uint256 _amountNeeded = _profit - want.balanceOf(address(this));
+            (uint256 liquidated, uint256 loss) = liquidatePosition(_amountNeeded);
+            _loss += loss;
         }
-        // QUI SEMPLICEMENTE CONTROLLO SE CI SONO DA PRELEVARE FONDI E AGGIORNI DATI DEL REPORT .
+
+        // Small rounding protection
+        if (_profit > 0) {
+            _profit = _profit - 1;
+        }
     }
 
-    // solhint-disable-next-line no-empty-blocks
     /**
-     * @notice Adjusts the strategy's position by depositing available funds into Init.
+     * @notice Adjusts the strategy's position by depositing available funds into Lendle.
      * @param _debtOutstanding Amount that may be withdrawn in the next harvest.
      */
     function adjustPosition(uint256 _debtOutstanding) internal override {
-        // TODO: Do something to invest excess `want` tokens (from the Vault) into your positions
-        // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
-
-        uint256 _balanceInContract = want.balanceOf(address(this)); // vedo quanti token liberi  ho nella contratto della strategia
+        uint256 _balanceInContract = want.balanceOf(address(this));
+        
         if (_balanceInContract > _debtOutstanding) {
-            uint256 _amountToInvest = _balanceInContract - _debtOutstanding; // calcolo quanto posso investire
-            bool success = _investInStrategy(_amountToInvest); // investo i fondi nella strategia
+            uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
+            bool success = _investInStrategy(_amountToInvest);
             require(success, "Error in invest");
         }
-        //altrimenti niente ci teniamo i fondi liquidi
     }
 
     /**
@@ -171,25 +182,18 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function liquidatePosition(
         uint256 _amountNeeded
     ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
-        // TODO: Do stuff here to free up to `_amountNeeded` from all positions back into `want`
-        // NOTE: Maintain invariant `want.balanceOf(this) >= _liquidatedAmount`
-        // NOTE: Maintain invariant `_liquidatedAmount + _loss <= _amountNeeded`
-
-        uint256 totalAssets = want.balanceOf(address(this));
-
-        // 1. Verifichiamo se ho abbastanza liquidità
-        if (totalAssets >= _amountNeeded) {
-            //se abbiamo più liquidità di quella che ci serve
-            //! allora va bene
-            _liquidatedAmount = _amountNeeded;
-            _loss = 0;
-        } else {
-            (_liquidatedAmount, _loss) = _withdrawSingleAmount(_amountNeeded);
+        uint256 balance = want.balanceOf(address(this));
+        if (balance >= _amountNeeded) {
+            return (_amountNeeded, 0);
         }
 
-        //! vincoli (solo per sviluppare ora )
-        //! require(want.balanceOf(address(this)) >= _liquidatedAmount);
-        //! require(_liquidatedAmount + _loss <= _amountNeeded);
+        uint256 amountToWithdraw = _amountNeeded - balance;
+        uint256 amountFreed = _withdrawTokenFromStrategy(amountToWithdraw);
+
+        _liquidatedAmount = balance + amountFreed;
+        if (_liquidatedAmount < _amountNeeded) {
+            _loss = _amountNeeded - _liquidatedAmount;
+        }
     }
 
     /**
@@ -197,37 +201,19 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return The total amount recovered to the strategy contract.
      */
     function liquidateAllPositions() internal override returns (uint256) {
-        // TODO: Liquidate all positions and return the amount freed.
         bool success = _totalRecall();
         require(success, "Error in total recall");
         return want.balanceOf(address(this));
     }
 
-    // NOTE: Can override `tendTrigger` and `harvestTrigger` if necessary
-    // solhint-disable-next-line no-empty-blocks
     /**
      * @notice Prepares the strategy for migration to a new contract.
      * @param _newStrategy Address of the new strategy contract.
      */
     function prepareMigration(address _newStrategy) internal override {
-        // TODO: Transfer any non-`want` tokens to the new strategy
-        // NOTE: `migrate` will automatically forward all `want` in this strategy to the new one
-        //! PER ORA NON POSSO PREVEDERLO QUINDI DIREI CHE LO LASCIO VUOTO.
+        // Transfer any lTokens that might be held
+        // migrate() will handle want tokens automatically
     }
-
-    // Override this to add all tokens/tokenized positions this contract manages
-    // on a *persistent* basis (e.g. not just for swapping back to want ephemerally)
-    // NOTE: Do *not* include `want`, already included in `sweep` below
-    //
-    // Example:
-    //
-    //    function protectedTokens() internal override view returns (address[] memory) {
-    //      address[] memory protected = new address[](3);
-    //      protected[0] = tokenA;
-    //      protected[1] = tokenB;
-    //      protected[2] = tokenC;
-    //      return protected;
-    //    }
 
     /**
      * @notice Returns a list of tokens to be protected from `sweep` operations.
@@ -240,71 +226,64 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         returns (address[] memory tokens)
     {
         tokens = new address[](1);
-        tokens[0] = lendingPool;
+        tokens[0] = lToken; // Protect our lTokens
     }
 
     /**
      * @notice
      *  Provide an accurate conversion from `_amtInWei` (denominated in wei)
      *  to `want` (using the native decimal characteristics of `want`).
-     * @dev
-     *  Care must be taken when working with decimals to assure that the conversion
-     *  is compatible. As an example:
-     *
-     *      given 1e17 wei (0.1 ETH) as input, and want is USDC (6 decimals),
-     *      with USDC/ETH = 1800, this should give back 1800000000 (180 USDC)
-     *
-     * @param _amtInWei The amount (in wei/1e-18 ETH) to convert to `want`
-     * @return The amount in `want` of `_amtInEth` converted to `want`
-     **/
+     */
     function ethToWant(
         uint256 _amtInWei
     ) public view virtual override returns (uint256) {
         return _amtInWei;
     }
 
+    // INTERNAL HELPER FUNCTIONS
+
     /**
-     * @notice Withdraws funds from the Init strategy.
+     * @notice Withdraws funds from the Lendle strategy.
      * @param _amount Amount to withdraw in `want`.
      * @return returnAmount Amount received.
      */
     function _withdrawTokenFromStrategy(
         uint256 _amount
     ) internal returns (uint256 returnAmount) {
-        // QUI DEVO RITIRARE I FONDI DALLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
         (returnAmount, ) = _withdrawSingleAmount(_amount);
     }
 
     /**
      * @notice Calculates the value of the current position and liquid assets.
      * @return _profit Total estimated profit.
-     * @return _loss Total estimated loss (always 0 in this strategy).
+     * @return _loss Total estimated loss.
      * @return _debtPayment Available liquid `want`.
      */
     function _returnDepositPlatformValue()
         internal
-        view
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
-        uint256 invested = lTokenToWant(balanceShare);
-        uint256 liquid = want.balanceOf(address(this));
-        uint256 totalAssets = invested + liquid;
-        _profit = totalAssets;
-        _loss = 0;
-        _debtPayment = liquid;
+        uint256 prevDebt = vault.strategies(address(this)).totalDebt;
+        uint256 currentAssetsFromFunc = estimatedTotalAssets();
+
+        if (currentAssetsFromFunc > prevDebt) {
+            _profit = currentAssetsFromFunc - prevDebt;
+        } else {
+            _loss = prevDebt - currentAssetsFromFunc;
+        }
+
+        _debtPayment = want.balanceOf(address(this));
     }
 
     /**
-     * @notice Deposits funds into the Init lending market.
+     * @notice Deposits funds into the Lendle lending market.
      * @param _amount Amount of `want` to invest.
      * @return success Whether the deposit was successful.
      */
     function _investInStrategy(
         uint256 _amount
     ) internal returns (bool success) {
-        // QUI DEVO INVESTIRE I FONDI NELLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
-
-        uint256 share = depositLendl(lendingPool, WMNT, _amount, lToken);
+        uint256 share = depositLendl(lendingPool, address(want), _amount, lToken);
         balanceShare += share;
         success = true;
     }
@@ -312,7 +291,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceShare);
 
     /**
-     * @notice Withdraws a specific amount of `want` from Init.
+     * @notice Withdraws a specific amount of `want` from Lendle.
      * @param _amount Amount of `want` to retrieve.
      * @return returnAmount Actual amount returned.
      * @return _loss Any loss incurred during withdrawal.
@@ -320,9 +299,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function _withdrawSingleAmount(
         uint256 _amount
     ) internal returns (uint256 returnAmount, uint256 _loss) {
-        // QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
         uint256 share = wantToLToken(_amount);
-        if (share >= balanceShare) {
+        
+        if (share > balanceShare) {
             emit ProblemWithWithdrawStrategy(
                 block.timestamp,
                 share,
@@ -330,41 +309,47 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             );
             revert("ProblemWithWithdrawStrategy");
         }
+        
         balanceShare -= share;
-        uint _returnamount = withdrawLendl(lendingPool, lToken, share);
-        require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
+        uint256 _returnamount = withdrawLendl(lendingPool, lToken, share);
+        require(_returnamount >= (_amount * 999) / 1000, "Returned too little"); // tolerance 0.1%
+        
         returnAmount = _amount;
         _loss = 0;
     }
 
-    function wantToLToken(uint256 wantAmount) public view returns (uint256) {
-        uint256 rate = IProtocolDataProvider(lendlDataProvider)
-            .getReserveNormalizedIncome(address(want));
-        require(rate > 0, "Invalid rate");
-        return (wantAmount * 1e27) / rate;
-    }
-
     /**
-     * @notice Withdraws all assets from Init and resets position.
+     * @notice Withdraws all assets from Lendle and resets position.
      * @return success Whether the recall was successful.
      */
     function _totalRecall() internal returns (bool success) {
-        // semplicemente chiamiamo tutti i fondi dalle varie piattaforme
-        uint _balanceShare = IERC20(lToken).balanceOf(address(this));
-        _withdrawSingleAmount(wantToLToken(_balanceShare));
+        if (balanceShare > 0) {
+            uint256 sharesToWithdraw = balanceShare;
+            uint256 amountReceived = withdrawLendl(lendingPool, lToken, sharesToWithdraw);
+            balanceShare = 0; // Reset after withdrawal
+        }
         success = true;
     }
 
     /**
-     * @notice Returns the current debt value of the shares held in the Init pool.
+     * @notice Returns the current debt value of the shares held in the Lendle pool.
      * @return The amount of `want` represented by `balanceShare`.
      */
     function getCurrentDebtValue() external view returns (uint256) {
         return lTokenToWant(balanceShare);
     }
 
-    /// @notice Returns the current aToken balance of the strategy
+    /// @notice Returns the current lToken balance of the strategy
     function currentLendleShare() public view returns (uint256) {
         return IERC20(lToken).balanceOf(address(this));
+    }
+
+    // TEST GETTERS (like Strategy1st)
+    function getBalanceShare() external view returns (uint256) {
+        return balanceShare;
+    }
+
+    function getEmergencyExitFlag() external view returns (bool) {
+        return emergencyExit;
     }
 }

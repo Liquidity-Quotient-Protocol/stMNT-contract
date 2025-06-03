@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
-import { console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 // These are the core Yearn libraries
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 
@@ -22,12 +22,12 @@ import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol
 
 contract Strategy1st is BaseStrategy, Iinit, Ownable {
     using SafeERC20 for IERC20;
-    using SafeERC20v4 for IERC20v4; 
+    using SafeERC20v4 for IERC20v4;
     using Address for address;
 
     address public immutable _initAddr =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
-    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8; 
+    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
     address public lendingPool; //0x44949636f778fAD2b139E665aee11a2dc84A2976
     uint private balanceShare;
 
@@ -83,9 +83,9 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     }
 
     function approveLendingPool() external onlyOwner {
-            SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
-            SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, type(uint256).max);
-}
+        SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
+        SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, type(uint256).max);
+    }
 
     // ******** OVERRIDE THESE METHODS FROM BASE CONTRACT ************
     /**
@@ -103,14 +103,13 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      */
     function estimatedTotalAssets() public view override returns (uint256) {
         //? Build a more accurate estimate using the value of all positions in terms of `want`
-        
-        
-        require(balanceShare== ILendingPool(lendingPool).balanceOf(address(this)), "Balance share mismatch");
-        
-        
-        uint _amountInShare = ILendingPool(lendingPool).toAmt(
-            balanceShare
+
+        require(
+            balanceShare == ILendingPool(lendingPool).balanceOf(address(this)),
+            "Balance share mismatch"
         );
+
+        uint _amountInShare = ILendingPool(lendingPool).toAmt(balanceShare);
 
         uint wantBal = want.balanceOf(address(this));
         return wantBal + _amountInShare;
@@ -138,13 +137,15 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         ILendingPool(lendingPool).accrueInterest();
         (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
 
-       if (want.balanceOf(address(this)) < _profit) {
-        uint256 _amountNeeded = _profit - want.balanceOf(address(this));
-        (uint256 liquidated, uint256 loss) = liquidatePosition(_amountNeeded);
-        _loss += loss;
-    }
-      if (_profit>0){
-            _profit = _profit- 1; // arrotondo per evitare problemi di precisione
+        if (want.balanceOf(address(this)) < _profit) {
+            uint256 _amountNeeded = _profit - want.balanceOf(address(this));
+            (uint256 liquidated, uint256 loss) = liquidatePosition(
+                _amountNeeded
+            );
+            _loss += loss;
+        }
+        if (_profit > 0) {
+            _profit = _profit - 1; // arrotondo per evitare problemi di precisione
         }
         // QUI SEMPLICEMENTE CONTROLLO SE CI SONO DA PRELEVARE FONDI E AGGIORNI DATI DEL REPORT .
     }
@@ -159,18 +160,15 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         // NOTE: Try to adjust positions so that `_debtOutstanding` can be freed up on *next* harvest (not immediately)
 
         uint256 _balanceInContract = want.balanceOf(address(this)); // vedo quanti token liberi  ho nella contratto della strategia
-        
 
         if (_balanceInContract > _debtOutstanding) {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding; // calcolo quanto posso investire
             bool success = _investInStrategy(_amountToInvest); // investo i fondi nella strategia
             require(success, "Error in invest");
         }
-      
+
         //altrimenti niente ci teniamo i fondi liquidi
     }
-
-
 
     /**
      * @notice Attempts to free up enough capital to satisfy a withdrawal.
@@ -178,20 +176,22 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @return _liquidatedAmount Actual amount withdrawn.
      * @return _loss Any incurred loss during withdrawal.
      */
-   function liquidatePosition(uint256 _amountNeeded) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
-    uint256 balance = want.balanceOf(address(this));
-    if (balance >= _amountNeeded) {
-        return (_amountNeeded, 0);
+    function liquidatePosition(
+        uint256 _amountNeeded
+    ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
+        uint256 balance = want.balanceOf(address(this));
+        if (balance >= _amountNeeded) {
+            return (_amountNeeded, 0);
+        }
+
+        uint256 amountToWithdraw = _amountNeeded - balance;
+        uint256 amountFreed = _withdrawTokenFromStrategy(amountToWithdraw);
+
+        _liquidatedAmount = balance + amountFreed;
+        if (_liquidatedAmount < _amountNeeded) {
+            _loss = _amountNeeded - _liquidatedAmount;
+        }
     }
-    
-    uint256 amountToWithdraw = _amountNeeded - balance;
-    uint256 amountFreed = _withdrawTokenFromStrategy(amountToWithdraw);
-    
-    _liquidatedAmount = balance + amountFreed;
-    if (_liquidatedAmount < _amountNeeded) {
-        _loss = _amountNeeded - _liquidatedAmount;
-    }
-}
 
     /**
      * @notice Attempts to exit all positions and retrieve funds.
@@ -282,32 +282,32 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @return _loss Total estimated loss (always 0 in this strategy).
      * @return _debtPayment Available liquid `want`.
      */
-function _returnDepositPlatformValue() internal returns (uint256 _profit, uint256 _loss, uint256 _debtPayment) {
-    uint256 prevDebt = vault.strategies(address(this)).totalDebt;
-    
-    uint256 strat_balanceShare = balanceShare; // Leggi una volta per consistenza nei log
-    uint256 valueOfSharesInLP;
-    if (lendingPool != address(0) && strat_balanceShare > 0) {
-        valueOfSharesInLP = ILendingPool(lendingPool).toAmt(strat_balanceShare);
+    function _returnDepositPlatformValue()
+        internal
+        returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
+    {
+        uint256 prevDebt = vault.strategies(address(this)).totalDebt;
 
-    } else {
-        valueOfSharesInLP = 0;
+        uint256 strat_balanceShare = balanceShare; // Leggi una volta per consistenza nei log
+        uint256 valueOfSharesInLP;
+        if (lendingPool != address(0) && strat_balanceShare > 0) {
+            valueOfSharesInLP = ILendingPool(lendingPool).toAmt(
+                strat_balanceShare
+            );
+        } else {
+            valueOfSharesInLP = 0;
+        }
 
+        uint256 currentAssetsFromFunc = estimatedTotalAssets();
+
+        if (currentAssetsFromFunc > prevDebt) {
+            _profit = currentAssetsFromFunc - prevDebt;
+        } else {
+            _loss = prevDebt - currentAssetsFromFunc;
+        }
+
+        _debtPayment = want.balanceOf(address(this));
     }
-
-    uint256 currentAssetsFromFunc = estimatedTotalAssets();
-
-
-
-    if (currentAssetsFromFunc > prevDebt) { 
-        _profit = currentAssetsFromFunc - prevDebt;
-    } else {
-        _loss = prevDebt - currentAssetsFromFunc;
-    }
-
-    _debtPayment = want.balanceOf(address(this));
- 
-}
 
     /**
      * @notice Deposits funds into the Init lending market.
@@ -319,11 +319,9 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
     ) internal returns (bool success) {
         // QUI DEVO INVESTIRE I FONDI NELLE VARIE PIATTAFORME DOVE LI HO DEPOSITATI
 
-    
         uint256 share = depositInit(lendingPool, WMNT, _amount, address(this));
         balanceShare += share;
         success = true;
-
     }
 
     event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceShare);
@@ -338,10 +336,8 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
         uint256 _amount
     ) internal returns (uint256 returnAmount, uint256 _loss) {
         // QUI RITIRIAMO I FONDI PER L'UTENTE CHE SE NE STA ANDANDO
-        uint256 share = ILendingPool(lendingPool).toShares(
-            _amount
-        );
- 
+        uint256 share = ILendingPool(lendingPool).toShares(_amount);
+
         if (share > balanceShare) {
             emit ProblemWithWithdrawStrategy(
                 block.timestamp,
@@ -353,7 +349,7 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
         balanceShare -= share;
         returnAmount = withdrawInit(lendingPool, share, address(this));
         require(returnAmount >= (_amount * 999) / 1000, "Returned too little"); // tolleranza 0.1%
-          
+
         _loss = 0;
     }
 
@@ -361,17 +357,46 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
      * @notice Withdraws all assets from Init and resets position.
      * @return success Whether the recall was successful.
      */
+
     function _totalRecall() internal returns (bool success) {
-        // semplicemente chiamiamo tutti i fondi dalle varie piattaforme
+        console.log(
+            "Strategy _totalRecall: Inizio. balanceShare attuale: %s",
+            balanceShare
+        );
 
-        require(balanceShare== ILendingPool(lendingPool).balanceOf(address(this)), "Balance share mismatch");
-        ILendingPool(lendingPool).accrueInterest();
-        uint _amount = ILendingPool(lendingPool).toAmt(balanceShare);
-        console.log("balanceShare %u", balanceShare);
-        console.log("_amount to withdraw: %u", _amount);
+        if (balanceShare > 0) {
+       
+            uint256 sharesToWithdraw = balanceShare; // Decidi di prelevare tutte le quote esistenti
 
-        liquidatePosition(_amount);
+   
+            console.log(
+                "Strategy _totalRecall: Tentativo di prelievo di %s shares.",
+                sharesToWithdraw
+            );
+            uint256 amountReceived = withdrawInit(
+                lendingPool,
+                sharesToWithdraw,
+                address(this)
+            );
+            // ^ Assumendo che withdrawInit prenda (pool, sharesToBurn, recipient) e restituisca amountWant
+            // e che tu abbia importato e definito correttamente withdrawInit dalla tua interfaccia Iinit.
+
+            console.log(
+                "Strategy _totalRecall: Ricevuti %s want per %s shares.",
+                amountReceived,
+                sharesToWithdraw
+            );
+
+            balanceShare = 0; // Azzera esplicitamente DOPO aver tentato il prelievo di tutte le quote.
+            console.log("Strategy _totalRecall: balanceShare azzerato.");
+        } else {
+            console.log(
+                "Strategy _totalRecall: Nessuna balanceShare da prelevare."
+            );
+        }
+
         success = true;
+        // liquidateAllPositions() (che chiama _totalRecall) restituirà want.balanceOf(address(this))
     }
 
     /**
@@ -382,5 +407,13 @@ function _returnDepositPlatformValue() internal returns (uint256 _profit, uint25
         return ILendingPool(lendingPool).debtShareToAmtStored(balanceShare);
     }
 
+    //! TEST GETTER
 
+    function getBalanceShare() external view returns (uint256) {
+        return balanceShare;
+    }
+
+    function getEmergencyExitFlag() external view returns (bool) {
+        return emergencyExit; // Se emergencyExit è public in BaseStrategy
+    }
 }

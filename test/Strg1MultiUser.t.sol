@@ -118,12 +118,10 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         }
     }
 
-/*
-    // ### Test Multi-Utente con Interazioni Miste ###
+
     function testMultiUser_MixedOperations_InterestAccrual() public {
         console.log("--- Starting Multi-User Test ---");
 
-        // ----- FASE 1: Depositi Iniziali e Primo Harvest -----
         uint256 depositA1 = 1000 ether;
         uint256 depositB1 = 1500 ether;
 
@@ -133,20 +131,19 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         wrapAndApprove(userB, depositB1);
         uint256 sharesB1 = depositToVault(userB, depositB1);
 
-        executeHarvest(); // Sposta i fondi nella strategia
+        executeHarvest(); 
         uint256 pps_after_harvest1 = vault.pricePerShare();
 
-        // ----- FASE 2: Periodo di Interesse e Nuovo Deposito -----
+      
         console.log("--- Phase 2: Interest Period & New Deposit ---");
         skip(30 days); 
         accrueAndLogLendingPool();
-        executeHarvest(); // La strategia riporta profitto, che viene "bloccato"
+        executeHarvest();
         
         uint256 pps_after_profit_report = vault.pricePerShare();
         console.log("PPS immediately after profit report (profit locked): %u", pps_after_profit_report);
-        // A questo punto, il PPS non dovrebbe essere aumentato significativamente
 
-        skip(8 hours); // Permetti al locked profit di sbloccarsi
+        skip(8 hours); 
         uint256 pps_after_profit_unlock = vault.pricePerShare();
         console.log("PPS after profit unlock time: %u", pps_after_profit_unlock);
         assertTrue(pps_after_profit_unlock > pps_after_harvest1, "PPS should increase after profit unlock");
@@ -155,28 +152,24 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         wrapAndApprove(userC, depositC1);
         uint256 sharesC1 = depositToVault(userC, depositC1); // UserC deposita con il nuovo PPS
 
-        // ----- FASE 3: Prelievi e Altro Periodo di Interesse -----
         console.log("--- Phase 3: Withdrawals & Another Interest Period ---");
         uint256 assetsA_p_prelievo = withdrawFromVault(userA, sharesA1 / 2); // UserA preleva metà
         assertTrue(assetsA_p_prelievo > depositA1 / 2, "UserA partial withdrawal should reflect some profit");
 
         skip(30 days);
         accrueAndLogLendingPool();
-        executeHarvest(); // Altro profitto riportato e bloccato
+        executeHarvest(); 
         
-        pps_after_profit_report = vault.pricePerShare(); // PPS prima dello sblocco
-        skip(8 hours); // Sblocco
+        pps_after_profit_report = vault.pricePerShare();
+        skip(8 hours); 
         pps_after_profit_unlock = vault.pricePerShare();
         console.log("PPS after 2nd profit unlock time: %u", pps_after_profit_unlock);
-        // assertTrue(pps_after_profit_unlock > pps_after_first_profit_unlock, "PPS should increase further"); // Adatta questa asserzione
 
-        // ----- FASE 4: Prelievi Finali -----
         console.log("--- Phase 4: Final Withdrawals ---");
         uint256 assetsA_finale = withdrawFromVault(userA, vault.balanceOf(userA)); // UserA preleva il resto
         uint256 assetsB_finale = withdrawFromVault(userB, sharesB1);
         uint256 assetsC_finale = withdrawFromVault(userC, sharesC1);
 
-        // Calcoli del profitto per ogni utente (semplificati)
         uint256 totalWithdrawnA = assetsA_p_prelievo + assetsA_finale;
         
         console.log("UserA: Deposited %u, Withdrew Total %u", depositA1, totalWithdrawnA);
@@ -187,11 +180,9 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         assertTrue(assetsB_finale > depositB1, "UserB total withdrawal should be > initial deposit");
         assertTrue(assetsC_finale > depositC1, "UserC total withdrawal should be > initial deposit (potrebbe essere meno se ha depositato tardi)");
 
-        // Verifica che la somma dei prelievi con profitto sia maggiore della somma dei depositi iniziali
-        // (escludendo userC se ha depositato dopo un forte aumento di PPS e prelevato subito)
         assertTrue(totalWithdrawnA + assetsB_finale > depositA1 + depositB1, "Combined profit for UserA & B not realized");
 
         console.log("SUCCESS: Multi-user test with mixed operations and interest completed.");
     }
-*/
+
 }

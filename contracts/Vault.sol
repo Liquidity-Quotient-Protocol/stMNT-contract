@@ -995,6 +995,8 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         if (shares == type(uint256).max) {
             shares = balanceOf[msg.sender];
         }
+        console.log("shares", shares);
+        console.log("balanceOf[msg.sender]", balanceOf[msg.sender]);
 
         require(shares <= balanceOf[msg.sender], "Vault: exceeds balance");
         require(shares > 0, "Vault: 0 shares");

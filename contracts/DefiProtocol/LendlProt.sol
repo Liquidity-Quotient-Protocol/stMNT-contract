@@ -27,23 +27,34 @@ contract Lendl {
         address _lToken
     ) internal returns (uint256 share) {
         uint256 balanceBefore = IERC20(_lToken).balanceOf(address(this));
+        
+        // Approve the lending pool to spend our tokens
+        IERC20(_tokenIn).safeApprove(_lendingPool, _amount);
+        
+        // Deposit to Lendle
         ILendingPool(_lendingPool).deposit(_tokenIn, _amount, address(this), 0);
+        
         uint256 balanceAfter = IERC20(_lToken).balanceOf(address(this));
         share = balanceAfter - balanceBefore;
+        
+        require(share > 0, "No lTokens received");
     }
 
     /**
-     * @notice Withdraw `_amount` of `_asset` from Lendle.
+     * @notice Withdraw `_amount` of lTokens from Lendle.
      * @param lendingPool Address of the lending pool.
-     * @param asset Underlying asset to withdraw.
-     * @param amount Amount to withdraw.
+     * @param _lToken Address of the lToken to withdraw.
+     * @param amount Amount of lTokens to withdraw.
      * @return received Amount of underlying asset received.
      */
     function withdrawLendl(
         address lendingPool,
-        address asset,
+        address _lToken,
         uint256 amount
     ) internal returns (uint256 received) {
-        received = ILendingPool(lendingPool).withdraw(asset, amount, address(this));
+        // For Aave/Lendle, we withdraw by specifying the underlying asset and amount of lTokens
+        // The lToken contract handles the burning automatically
+        received = ILendingPool(lendingPool).withdraw(_lToken, amount, address(this));
+        require(received > 0, "No assets received from withdrawal");
     }
 }

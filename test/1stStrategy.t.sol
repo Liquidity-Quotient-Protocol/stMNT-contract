@@ -28,13 +28,15 @@ contract Strg1 is Test {
     address public guardian = address(4);
     address public user1 = address(5);
     address public user2 = address(6);
+    address public user3 = address(7);
 
-    // address public user2 = address(6); // Non usato in questo test
+
+  
 
     IWETH public constant WMNT =
         IWETH(address(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8));
 
-    // Indirizzo del LendingPool usato nei test
+
     address internal constant LENDING_POOL_ADDRESS =
         0x44949636f778fAD2b139E665aee11a2dc84A2976;
 
@@ -48,26 +50,22 @@ contract Strg1 is Test {
             guardian,
             management
         );
-        // Setup della strategia direttamente qui per averla disponibile in tutti i test
         vm.startPrank(governance);
         strategy1st = new Strategy1st(address(vault), governance);
         strategy1st.setLendingPool(LENDING_POOL_ADDRESS);
-        // Assicurati che le approval siano fatte una volta e correttamente
-        // Se updateUnlimitedSpending già gestisce l'approve del vault dalla strategia, potrebbe bastare.
-        // L'approve del lending pool dalla strategia è anche importante.
-        strategy1st.updateUnlimitedSpending(true); // Strategia approva vault per 'want'
-        strategy1st.updateUnlimitedSpendingInit(true); // Strategia approva _initAddr per 'want'
-        strategy1st.approveLendingPool(); // Strategia approva lendingPool per 'want'
+        strategy1st.updateUnlimitedSpending(true);
+        strategy1st.updateUnlimitedSpendingInit(true); 
+        strategy1st.approveLendingPool(); 
         vault.addStrategy(
             address(strategy1st),
-            10_000, // 100% debtRatio
-            0, // minDebtPerHarvest (impostalo a 0 per test più semplici se non vuoi vincoli)
-            type(uint256).max, // maxDebtPerHarvest (illimitato per semplicità di test)
-            0 // performanceFee (0 per questo test)
+            10_000, 
+            0, 
+            type(uint256).max, 
+            0 
         );
-        vault.setPerformanceFee(0); // Commissione di performance del Vault a 0
-        vault.setManagementFee(0); // Commissione di gestione del Vault a 0
-        vault.setDepositLimit(type(uint256).max); // Nessun limite di deposito per il test
+        vault.setPerformanceFee(0); 
+        vault.setManagementFee(0); 
+        vault.setDepositLimit(type(uint256).max); 
         vm.stopPrank();
     }
 
@@ -159,8 +157,7 @@ contract Strg1 is Test {
         vm.stopPrank();
     }
 
-    // Questo test è semplice, verifica solo che il deposito e prelievo base con una strategia
-    // (senza interessi significativi) funzioni come previsto.
+
     function testDepositAndWithdraw_WithStrategy_NoInterest()
         internal
         returns (uint256)
@@ -355,74 +352,11 @@ contract Strg1 is Test {
         return assetsWithdrawn;
     }
 
-    function testEmergencyWithdraw() internal {
-        uint256 depositAmount = 1000 ether;
-
-        vm.deal(user1, depositAmount * 2);
-        vm.startPrank(user1);
-        wrapMNT(depositAmount);
-        WMNT.approve(address(vault), depositAmount);
-        vm.stopPrank();
-/*
-        skip(8 days);
-
-        uint256 depositAmount2 = 216 ether;
-        vm.deal(user2, depositAmount2 * 2);
-        vm.startPrank(user2);
-        wrapMNT(depositAmount2);
-        WMNT.approve(address(vault), depositAmount2);
-        vm.stopPrank();
-
-        skip(1 days);
-
-        vm.startPrank(management);
-        strategy1st.harvest();
-        vm.stopPrank();
-
-    console.log(
-            "Strategy balance after emergency exit: %s",
-            WMNT.balanceOf(address(strategy1st))
-        );
-        skip(12 days);
-
-        uint256 depositAmount3 = 154 ether;
-        vm.deal(user1, depositAmount3 * 2);
-        vm.startPrank(user1);
-        wrapMNT(depositAmount3);
-        WMNT.approve(address(vault), depositAmount3);
-        vm.stopPrank();
-
-        skip(2 days);
-
-        vm.startPrank(management);
-        strategy1st.harvest();
-        vm.stopPrank();
-
-        skip(4 days);
-
-        // l' onlyEmergencyAuthorized revoka la strategia
-        vm.startPrank(management);
-        strategy1st.setEmergencyExit();
-        strategy1st.harvest();
-        vm.stopPrank();
-
-
-        uint256 balanceStrategy = WMNT.balanceOf(address(strategy1st));
-        console.log(
-            "Strategy balance after emergency exit: %s",
-            WMNT.balanceOf(address(strategy1st))
-        );
-        uint256 balanceVault = WMNT.balanceOf(address(vault));
-        console.log("Vault balance after emergency exit: %s", balanceVault); 
-*/
-    }
+ 
 
     function testFullFlow_InterestAccrualAndWithdrawal() public {
-        // Rinominato testAllTogether
-        testInitialize(); // Verifica inizializzazione
-        // setUpStrategy e setStrategyOnVauls sono già in setUp() globale
-/*
-        // Esegui un test di deposito/prelievo semplice senza aspettativa di interessi significativi
+        testInitialize();
+    
         uint asset_no_interest = testDepositAndWithdraw_WithStrategy_NoInterest();
         console.log("--- Output from NoInterest test run ---");
         console.log(
@@ -430,15 +364,12 @@ contract Strg1 is Test {
             asset_no_interest
         );
 
-        // Salta un po' di tempo per evitare che i timestamp siano troppo vicini se i test sono veloci
         skip(1 hours);
 
-        // Esegui il test principale con accumulo di interessi
         uint asset_with_interest = testDeposit_Harvest_GeneratesInterest_And_Withdraw();
         console.log("--- Output from WithInterest test run ---");
         console.log("Assets returned (with interest): %s", asset_with_interest);
 
-        // Asserzione finale chiave
         assertTrue(
             asset_with_interest > asset_no_interest,
             "FAIL: Assets with interest are not greater than assets without interest."
@@ -446,7 +377,7 @@ contract Strg1 is Test {
         console.log(
             "SUCCESS: Interest successfully accrued and withdrawn by user."
         );
-*/
-        testEmergencyWithdraw();
+
+
     }
 }
