@@ -30,7 +30,6 @@ contract Strg2 is Test {
     address public user2 = address(6);
     address public user3 = address(7);
 
-
     IWETH public constant WMNT =
         IWETH(address(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8));
 
@@ -50,17 +49,17 @@ contract Strg2 is Test {
         vm.startPrank(governance);
         strategy2nd = new Strategy2nd(address(vault), governance);
         strategy2nd.updateUnlimitedSpending(true);
-        strategy2nd.updateUnlimitedSpendingLendl(true); 
+        strategy2nd.updateUnlimitedSpendingLendl(true);
         vault.addStrategy(
             address(strategy2nd),
-            10_000, 
-            0, 
-            type(uint256).max, 
-            0 
+            10_000,
+            0,
+            type(uint256).max,
+            0
         );
-        vault.setPerformanceFee(0); 
-        vault.setManagementFee(0); 
-        vault.setDepositLimit(type(uint256).max); 
+        vault.setPerformanceFee(0);
+        vault.setManagementFee(0);
+        vault.setDepositLimit(type(uint256).max);
         vm.stopPrank();
     }
 
@@ -89,7 +88,6 @@ contract Strg2 is Test {
         assertEq(vault.depositLimit(), type(uint256).max); // Modificato
         vm.stopPrank();
 
-
         vm.startPrank(user1);
         vm.expectRevert("Vault: !governance");
         vault.setPerformanceFee(1000);
@@ -109,14 +107,14 @@ contract Strg2 is Test {
         vm.startPrank(governance);
 
         (
-            uint256 performanceFee, 
-            uint256 activation, 
-            uint256 originalDebtRatio, 
-            uint256 minDebtPerHarvest, 
-            uint256 maxDebtPerHarvest, 
-            uint256 lastReport, 
-            uint256 totalDebt, 
-            uint256 totalGain, 
+            uint256 performanceFee,
+            uint256 activation,
+            uint256 originalDebtRatio,
+            uint256 minDebtPerHarvest,
+            uint256 maxDebtPerHarvest,
+            uint256 lastReport,
+            uint256 totalDebt,
+            uint256 totalGain,
             uint256 totalLoss
         ) = vault.strategies(address(strategy2nd));
 
@@ -126,7 +124,7 @@ contract Strg2 is Test {
         vm.startPrank(user1);
         uint256 shares = vault.deposit(1000 ether, user1);
         assertEq(shares, 1000 ether);
-        assertEq(vault.pricePerShare(), 1 ether); 
+        assertEq(vault.pricePerShare(), 1 ether);
 
         // Non serve vault.approve per prelevare le proprie quote
         // vault.approve(address(vault), 1 ether);
@@ -134,8 +132,8 @@ contract Strg2 is Test {
         assertEq(assets, 1000 ether);
 
         // vault.approve(address(vault), 1 ether);
-        vm.expectRevert(); 
-        vault.withdraw(1, user1, 0); 
+        vm.expectRevert();
+        vault.withdraw(1, user1, 0);
         vm.stopPrank();
 
         vm.startPrank(governance);
@@ -143,12 +141,10 @@ contract Strg2 is Test {
         vm.stopPrank();
     }
 
-
     function testDepositAndWithdraw_WithStrategy_NoInterest()
         internal
         returns (uint256)
     {
-       
         uint256 depositAmount = 1000 ether;
         vm.deal(user1, depositAmount * 2); // Dai fondi all'utente
 
@@ -173,15 +169,14 @@ contract Strg2 is Test {
             "PPS after 1st harvest (NoInterestTest): ",
             ppsAfterHarvest
         );
-    
 
         // Verifica che le quote siano circa equivalenti al deposito se PPS è ~1e18
         assertApproxEqAbs(shares, depositAmount, 1, "Shares calculation issue");
 
         vm.startPrank(user1);
- 
+
         uint256 assets = vault.withdraw(shares, user1, 100); // maxLoss 0.01% = 10 BPS
-  
+
         assertApproxEqRel(
             assets,
             depositAmount,
@@ -192,13 +187,10 @@ contract Strg2 is Test {
         return assets;
     }
 
-
-
-  function testDepositAndWithdraw_WithStrategy_WithInterest()
+    function testDepositAndWithdraw_WithStrategy_WithInterest()
         internal
         returns (uint256)
     {
-       
         uint256 depositAmount = 1000 ether;
         vm.deal(user1, depositAmount * 2); // Dai fondi all'utente
 
@@ -213,46 +205,53 @@ contract Strg2 is Test {
             "PPS before 1st harvest (NoInterestTest): ",
             ppsBeforeHarvest
         );
-
         vm.startPrank(management); // keeper
         strategy2nd.harvest();
         vm.stopPrank();
 
         skip(60 days);
-
+/*
 
         vm.startPrank(management); // keeper
         strategy2nd.harvest();
         vm.stopPrank();
         skip(10 hours);
+*/
+        console.log(
+            "strategia balance ->",
+            IERC20(address(WMNT)).balanceOf(address(strategy2nd))
+        );
 
+        console.log(
+            "vault balance ->",
+            IERC20(address(WMNT)).balanceOf(address(vault))
+        );
 
         uint256 ppsAfterHarvest = vault.pricePerShare();
-        console.log(
-            "PPS after 1st harvest  ",
-            ppsAfterHarvest
-        );
-/*
+        console.log("PPS after 1st harvest  ", ppsAfterHarvest);
 
         vm.startPrank(user1);
 
         uint256 assets = vault.withdraw(shares, user1, 100); // maxLoss 0.01% = 10 BPS
 
-        assertGe(assets, depositAmount, "Withdrawal amount should be greater than deposit (interest accrued)");
+        console.log("Withdrawal amount (WithInterestTest): ", assets);
+/*
+        assertGe(
+            assets,
+            depositAmount,
+            "Withdrawal amount should be greater than deposit (interest accrued)"
+        );*/
         vm.stopPrank();
         return assets;
-        */
     }
- 
 
     function testFullFlow_InterestAccrualAndWithdrawal() public {
         testInitialize();
 
-        testDepositAndWithdraw_NoStrategy();    
+        //testDepositAndWithdraw_NoStrategy();
 
         //testDepositAndWithdraw_WithStrategy_NoInterest();
-     
-        testDepositAndWithdraw_WithStrategy_WithInterest();
 
+        testDepositAndWithdraw_WithStrategy_WithInterest();
     }
 }

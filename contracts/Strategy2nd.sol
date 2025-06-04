@@ -105,7 +105,6 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         uint256 rate = ILendingPool(lendingPool).getReserveNormalizedIncome(
             address(want)
         );
-        console.log("Rate:", rate);
         return (lTokenAmount * rate) / 1e27; // Rate è in ray (1e27)
     }
 
@@ -119,15 +118,12 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         return (wantAmount * 1e27) / rate;
     }
 
-
-    function verita()external view returns(uint256){
-          uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
+    function verita() external view returns (uint256) {
+        uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
         return actualLTokenBalance;
     }
-
-
 
     /**
      * @notice Estimates the total assets held by the strategy in terms of `want`.
@@ -138,7 +134,6 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
-        console.log("Effective lToken balance:", actualLTokenBalance);
         uint256 valueInLending = lTokenToWant(actualLTokenBalance);
         uint256 liquidWant = want.balanceOf(address(this));
 
@@ -162,22 +157,20 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         // Get current profit/loss calculation
         (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
 
-
-
         // If we need to liquidate for the profit reporting
         if (want.balanceOf(address(this)) < _profit) {
             uint256 _amountNeeded = _profit - want.balanceOf(address(this));
-            (uint256 liquidated, uint256 loss) = liquidatePosition(
-                _amountNeeded
-            );
-            _loss += loss;
-
+            if (_amountNeeded > 0) {
+                (uint256 liquidated, uint256 lossFromLiq) = liquidatePosition(
+                    _amountNeeded
+                );
+                _loss += lossFromLiq;
+            }
         }
-
-        // Small rounding protection
         if (_profit > 0) {
-            _profit = _profit - 1;
+            _profit = _profit - 1; 
         }
+
     }
 
     /**
@@ -185,8 +178,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @param _debtOutstanding Amount that may be withdrawn in the next harvest.
      */
     function adjustPosition(uint256 _debtOutstanding) internal override {
-
         uint256 _balanceInContract = want.balanceOf(address(this));
+        
+      
 
         if (_balanceInContract > _debtOutstanding) {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
@@ -291,8 +285,10 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
         if (currentAssetsFromFunc > prevDebt) {
             _profit = currentAssetsFromFunc - prevDebt;
+            _loss = 0;
         } else {
             _loss = prevDebt - currentAssetsFromFunc;
+            _profit = 0;
         }
 
         _debtPayment = want.balanceOf(address(this));
@@ -306,8 +302,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function _investInStrategy(
         uint256 _amount
     ) internal returns (bool success) {
+  
         // Deposita WMNT e ricevi lWMNT
-        
+        if (_amount == 0) return true;
         uint256 balanceBefore = IERC20(lTokenWMNT).balanceOf(address(this));
 
         ILendingPool(lendingPool).deposit(
@@ -318,39 +315,55 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         );
 
         uint256 balanceAfter = IERC20(lTokenWMNT).balanceOf(address(this));
-        require(balanceBefore<balanceAfter, "Deposit failed, no lTokens received");
+        require(
+            balanceBefore < balanceAfter,
+            "Deposit failed, no lTokens received"
+        );
         success = true;
     }
 
     event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceAfter);
 
-  
     function _withdrawSingleAmount(
         uint256 _amountWantToWithdraw // Quantità di WMNT che si vuole prelevare
     ) internal returns (uint256 actualAmountReceived, uint256 _loss) {
-        console.log(
-            "Strategy _withdrawSingleAmount: Inizio prelievo per %s want",
-            _amountWantToWithdraw
-        );
-
         if (_amountWantToWithdraw == 0) {
             return (0, 0);
         }
 
+        //!Mi serve sapere quanti token ho in totale
         uint256 lTokensHeldBeforeWithdraw = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
+        //console.log("Ltoken Address -> ", address(lTokenWMNT));
+        uint totalBal = lTokenToWant(lTokensHeldBeforeWithdraw);
+    
+        console.log(
+            "LTokens held before withdraw: %s, Total Balance in WMNT: %s",
+            lTokensHeldBeforeWithdraw,
+            totalBal
+        );
+        require(_amountWantToWithdraw <= totalBal, "Insufficient balance");
+        actualAmountReceived = ILendingPool(lendingPool).withdraw(
+            WMNT, // asset sottostante (WMNT)
+            _amountWantToWithdraw, //amountToActuallyAttemptWithdraw, // quantità di WMNT da prelevare
+            address(this) // a chi inviare
+        );
+        
+
+        /*
+        
+
+
 
         // Non possiamo prelevare più del valore delle quote che abbiamo.
         uint256 maxValueOfOurLTokens = lTokenToWant(lTokensHeldBeforeWithdraw);
         uint256 amountToActuallyAttemptWithdraw = _amountWantToWithdraw;
+        console.log("Valore massimo delle nostre quote:", maxValueOfOurLTokens);
+        console.log("Sono qui");
 
         if (amountToActuallyAttemptWithdraw > maxValueOfOurLTokens) {
-            console.log(
-                "Strategy _withdrawSingleAmount: Richiesta di prelievo (%s) maggiore del valore delle quote (%s). Prelevo il massimo.",
-                amountToActuallyAttemptWithdraw,
-                maxValueOfOurLTokens
-            );
+   
             amountToActuallyAttemptWithdraw = maxValueOfOurLTokens;
         }
 
@@ -361,9 +374,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             // Abbiamo lTokens ma valgono 0. Per Aave, per ritirare lTokens con valore 0 (e bruciarli),
             // si può chiamare withdraw con type(uint256).max per ritirare "tutto il possibile".
             // Se il valore è davvero 0, actualAmountReceived sarà 0.
-            console.log(
-                "Strategy _withdrawSingleAmount: lTokens hanno valore 0, tentativo di ritirare tutto (type(uint256).max)."
-            );
+      
             actualAmountReceived = ILendingPool(lendingPool).withdraw(
                 WMNT,
                 type(uint256).max, // Tentativo di prelevare tutto l'underlying possibile per le quote detenute
@@ -372,9 +383,10 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         } else if (amountToActuallyAttemptWithdraw > 0) {
             actualAmountReceived = ILendingPool(lendingPool).withdraw(
                 WMNT, // asset sottostante (WMNT)
-                amountToActuallyAttemptWithdraw, // quantità di WMNT da prelevare
+                uint(1001402258454902276901),//amountToActuallyAttemptWithdraw, // quantità di WMNT da prelevare
                 address(this) // a chi inviare
             );
+            console.log("Quanto abbiamo ricevuto?", actualAmountReceived);
         } else {
             // amountToActuallyAttemptWithdraw è 0 e lTokensHeldBeforeWithdraw è 0
             actualAmountReceived = 0;
@@ -396,11 +408,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             _loss = 0;
         }
 
-        console.log(
-            "Strategy _withdrawSingleAmount: Ricevuti %s want, perdita calcolata: %s",
-            actualAmountReceived,
-            _loss
-        );
+   */
         return (actualAmountReceived, _loss);
     }
 
@@ -409,11 +417,10 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return success Whether the recall was successful.
      */
     function _totalRecall() internal returns (bool success) {
-      
         uint256 currentActualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
-    
+
         if (currentActualLTokenBalance > 0) {
             uint256 balanceWantBeforeWithdraw = want.balanceOf(address(this));
 
@@ -426,11 +433,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             uint256 balanceWantAfterWithdraw = want.balanceOf(address(this));
             uint256 amountEffectivelyWithdrawn = balanceWantAfterWithdraw -
                 balanceWantBeforeWithdraw;
-        } else {
-            console.log(
-                "Strategy _totalRecall: Nessuna balanceShare (lTokens) da prelevare."
-            );
-        }
+        } else {}
         success = true;
     }
 
