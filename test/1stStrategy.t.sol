@@ -113,33 +113,33 @@ contract Strg1 is Test {
         vm.startPrank(governance);
 
         (
-            uint256 performanceFee, // Ignoreremo questo per ora se non serve
-            uint256 activation, // Ignoreremo questo
-            uint256 originalDebtRatio, // Questo è il valore che ci interessa
-            uint256 minDebtPerHarvest, // Ignoreremo questo
-            uint256 maxDebtPerHarvest, // Ignoreremo questo
-            uint256 lastReport, // Ignoreremo questo
-            uint256 totalDebt, // Ignoreremo questo
-            uint256 totalGain, // Ignoreremo questo
-            uint256 totalLoss // Ignoreremo questo
+            uint256 performanceFee, 
+            uint256 activation, 
+            uint256 originalDebtRatio, 
+            uint256 minDebtPerHarvest, 
+            uint256 maxDebtPerHarvest, 
+            uint256 lastReport, 
+            uint256 totalDebt, 
+            uint256 totalGain, 
+            uint256 totalLoss 
         ) = vault.strategies(address(strategy1st));
 
-        vault.updateStrategyDebtRatio(address(strategy1st), 0); // Disattiva la strategia
+        vault.updateStrategyDebtRatio(address(strategy1st), 0); 
         vm.stopPrank();
-        vault.updateStrategyDebtRatio(address(strategy1st), 0); // Disattiva la strategia
+        vault.updateStrategyDebtRatio(address(strategy1st), 0); 
         vm.stopPrank();
-        vault.updateStrategyDebtRatio(address(strategy1st), 0); // Disattiva la strategia
+        vault.updateStrategyDebtRatio(address(strategy1st), 0); 
         vm.stopPrank();
 
         uint256 shares = vault.deposit(1000 ether, user1);
         assertEq(shares, 1000 ether);
-        assertEq(vault.pricePerShare(), 1 ether); // Senza strategia attiva, PPS dovrebbe essere 1
+        assertEq(vault.pricePerShare(), 1 ether); 
 
-        uint256 assets = vault.withdraw(shares, user1, 0); // maxLoss a 0
+        uint256 assets = vault.withdraw(shares, user1, 0); 
         assertEq(assets, 1000 ether);
 
-        vm.expectRevert(); // Dovrebbe fallire perché l'utente non ha più quote
-        vault.withdraw(1, user1, 0); // Tenta di prelevare 1 quota
+        vm.expectRevert(); 
+        vault.withdraw(1, user1, 0);
         vm.stopPrank();
 
         vm.startPrank(governance);

@@ -134,10 +134,11 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         uint256 actualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
-        uint256 valueInLending = lTokenToWant(actualLTokenBalance);
+        //uint256 valueInLending = wantToLToken(actualLTokenBalance);
+
         uint256 liquidWant = want.balanceOf(address(this));
 
-        return liquidWant + valueInLending;
+        return liquidWant + actualLTokenBalance;
     }
 
     /**
@@ -168,9 +169,8 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             }
         }
         if (_profit > 0) {
-            _profit = _profit - 1; 
+            _profit = _profit - 1;
         }
-
     }
 
     /**
@@ -179,8 +179,6 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      */
     function adjustPosition(uint256 _debtOutstanding) internal override {
         uint256 _balanceInContract = want.balanceOf(address(this));
-        
-      
 
         if (_balanceInContract > _debtOutstanding) {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
@@ -302,7 +300,6 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function _investInStrategy(
         uint256 _amount
     ) internal returns (bool success) {
-  
         // Deposita WMNT e ricevi lWMNT
         if (_amount == 0) return true;
         uint256 balanceBefore = IERC20(lTokenWMNT).balanceOf(address(this));
@@ -331,25 +328,25 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
             return (0, 0);
         }
 
-        //!Mi serve sapere quanti token ho in totale
         uint256 lTokensHeldBeforeWithdraw = IERC20(lTokenWMNT).balanceOf(
             address(this)
         );
         //console.log("Ltoken Address -> ", address(lTokenWMNT));
         uint totalBal = lTokenToWant(lTokensHeldBeforeWithdraw);
-    
-        console.log(
-            "LTokens held before withdraw: %s, Total Balance in WMNT: %s",
-            lTokensHeldBeforeWithdraw,
-            totalBal
-        );
-        require(_amountWantToWithdraw <= totalBal, "Insufficient balance");
-        actualAmountReceived = ILendingPool(lendingPool).withdraw(
-            WMNT, // asset sottostante (WMNT)
-            _amountWantToWithdraw, //amountToActuallyAttemptWithdraw, // quantità di WMNT da prelevare
-            address(this) // a chi inviare
-        );
-        
+
+        if (totalBal <= _amountWantToWithdraw) {
+            actualAmountReceived = ILendingPool(lendingPool).withdraw(
+                WMNT,
+                type(uint256).max, // Preleva tutto l'underlying possibile per le quote detenute
+                address(this)
+            );
+        } else {
+            actualAmountReceived = ILendingPool(lendingPool).withdraw(
+                WMNT,
+                _amountWantToWithdraw,
+                address(this)
+            );
+        }
 
         /*
         
@@ -417,23 +414,12 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @return success Whether the recall was successful.
      */
     function _totalRecall() internal returns (bool success) {
-        uint256 currentActualLTokenBalance = IERC20(lTokenWMNT).balanceOf(
-            address(this)
+        ILendingPool(lendingPool).withdraw(
+            WMNT, // L'asset sottostante (WMNT)
+            type(uint256).max, // Indica di prelevare tutto l'underlying possibile per le quote detenute
+            address(this) // A chi inviare i fondi
         );
 
-        if (currentActualLTokenBalance > 0) {
-            uint256 balanceWantBeforeWithdraw = want.balanceOf(address(this));
-
-            ILendingPool(lendingPool).withdraw(
-                WMNT, // L'asset sottostante (WMNT)
-                type(uint256).max, // Indica di prelevare tutto l'underlying possibile per le quote detenute
-                address(this) // A chi inviare i fondi
-            );
-
-            uint256 balanceWantAfterWithdraw = want.balanceOf(address(this));
-            uint256 amountEffectivelyWithdrawn = balanceWantAfterWithdraw -
-                balanceWantBeforeWithdraw;
-        } else {}
         success = true;
     }
 
