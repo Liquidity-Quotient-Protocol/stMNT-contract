@@ -223,7 +223,7 @@ contract Strg1EmergencyTest is
             "Strategy WMNT balance should be ~0 after emergency harvest"
         );
 
-        uint256 finalStrategyLPShares = strategy1st.getBalanceShare(); // Controlla la variabile interna
+        uint256 finalStrategyLPShares = strategy1st.getBalanceShare();
         assertApproxEqAbs(
             finalStrategyLPShares,
             0,

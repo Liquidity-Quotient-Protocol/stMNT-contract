@@ -33,7 +33,7 @@ interface ILendingPool {
         view
         returns (uint256);
 
-    // Altre funzioni utili del LendingPool
+
     function getReserveData(address asset)
         external
         view
@@ -54,7 +54,6 @@ interface ILendingPool {
 }
 
 interface IProtocolDataProvider {
-    // Questa funzione ESISTE nel DataProvider
     function getReserveTokensAddresses(address asset)
         external
         view
@@ -64,7 +63,6 @@ interface IProtocolDataProvider {
             address variableDebtTokenAddress
         );
 
-    // Queste funzioni ESISTONO nel DataProvider
     function getUserReserveData(address asset, address user)
         external
         view

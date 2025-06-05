@@ -4,7 +4,7 @@ pragma solidity 0.8.19;
 import {Test, console} from "forge-std/Test.sol";
 import {StMNT} from "../contracts/Vault.sol";
 import {Strategy1st} from "../contracts/Strategy1st.sol";
-import {IInitCore, ILendingPool} from "../contracts/interface/IInitCore.sol"; // Assicurati che questo percorso sia corretto
+import {IInitCore, ILendingPool} from "../contracts/interface/IInitCore.sol"; 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 
@@ -16,7 +16,7 @@ interface IWETH {
     function balanceOf(address) external view returns (uint256);
 }
 
-contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarezza
+contract Strg1MultiUser is Test { 
     StMNT public vault;
     Strategy1st public strategy1st;
 
@@ -25,9 +25,9 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
     address public treasury = address(3);
     address public guardian = address(4);
     
-    address public userA = address(0xA); // Utente A
-    address public userB = address(0xB); // Utente B
-    address public userC = address(0xC); // Utente C
+    address public userA = address(0xA); 
+    address public userB = address(0xB); 
+    address public userC = address(0xC); 
 
     IWETH public constant WMNT =
         IWETH(address(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8));
@@ -39,7 +39,7 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
             address(WMNT),
             governance,
             treasury,
-            "stMNT_Multi", // Nome leggermente diverso per evitare conflitti se esegui più test
+            "stMNT_Multi",
             "stMNT_Multi",
             guardian,
             management
@@ -64,7 +64,6 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         vault.setDepositLimit(type(uint256).max); 
         vm.stopPrank();
 
-        // Fornisci fondi iniziali agli utenti
         vm.deal(userA, 5000 ether);
         vm.deal(userB, 5000 ether);
         vm.deal(userC, 5000 ether);
@@ -114,7 +113,6 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         if (strategySharesInLP > 0) {
             uint valueAfterAccrue = ILendingPool(LENDING_POOL_ADDRESS).toAmt(strategySharesInLP);
             console.log("LendingPool - Value of LP shares AFTER accrue (toAmt): %u", valueAfterAccrue);
-            // Potresti aggiungere un assertTrue qui se ti aspetti sempre un aumento
         }
     }
 
@@ -150,10 +148,10 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
 
         uint256 depositC1 = 800 ether;
         wrapAndApprove(userC, depositC1);
-        uint256 sharesC1 = depositToVault(userC, depositC1); // UserC deposita con il nuovo PPS
+        uint256 sharesC1 = depositToVault(userC, depositC1);
 
         console.log("--- Phase 3: Withdrawals & Another Interest Period ---");
-        uint256 assetsA_p_prelievo = withdrawFromVault(userA, sharesA1 / 2); // UserA preleva metà
+        uint256 assetsA_p_prelievo = withdrawFromVault(userA, sharesA1 / 2); 
         assertTrue(assetsA_p_prelievo > depositA1 / 2, "UserA partial withdrawal should reflect some profit");
 
         skip(30 days);
@@ -166,7 +164,7 @@ contract Strg1MultiUser is Test { // Rinominato il contratto di test per chiarez
         console.log("PPS after 2nd profit unlock time: %u", pps_after_profit_unlock);
 
         console.log("--- Phase 4: Final Withdrawals ---");
-        uint256 assetsA_finale = withdrawFromVault(userA, vault.balanceOf(userA)); // UserA preleva il resto
+        uint256 assetsA_finale = withdrawFromVault(userA, vault.balanceOf(userA)); 
         uint256 assetsB_finale = withdrawFromVault(userB, sharesB1);
         uint256 assetsC_finale = withdrawFromVault(userC, sharesC1);
 
