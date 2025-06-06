@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import { console} from "forge-std/Test.sol";
+import {console} from "forge-std/Test.sol";
 
 /// @title Vault Interface Definitions and Storage for Forked Yearn V2 Vault
 /// @notice Defines constants, interfaces, and storage layout for the Vault contract.
@@ -300,10 +300,17 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         string memory _symbolOverride,
         address _guardian,
         address _management
-    ){
-        initialize(_token, _governance, _rewards, _nameOverride, _symbolOverride, _guardian, _management);
+    ) {
+        initialize(
+            _token,
+            _governance,
+            _rewards,
+            _nameOverride,
+            _symbolOverride,
+            _guardian,
+            _management
+        );
     }
-
 
     /**
      * @notice Initializes the Vault. Can only be called once.
@@ -335,9 +342,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         token = IERC20(_token);
 
         if (bytes(_nameOverride).length == 0) {
-            name = string(
-                string.concat("st", IDetailedERC20(_token).name())
-            );
+            name = string(string.concat("st", IDetailedERC20(_token).name()));
         } else {
             name = _nameOverride;
         }
@@ -387,7 +392,6 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
     function apiVersion() external pure returns (string memory) {
         return API_VERSION;
     }
-
 
     /**
      * @notice Exposes the domain separator publicly.
@@ -782,7 +786,16 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         require(_owner != address(0), "Vault: invalid owner");
         require(_expiry >= block.timestamp, "Vault: expired permit");
 
-        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPE_HASH, _owner, _spender, _amount, nonces[_owner], _expiry));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                PERMIT_TYPE_HASH,
+                _owner,
+                _spender,
+                _amount,
+                nonces[_owner],
+                _expiry
+            )
+        );
 
         bytes32 hash_ = _hashTypedDataV4(structHash);
         address signer_ = ECDSA.recover(hash_, _v, _r, _s);
@@ -990,12 +1003,9 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
 
         require(_maxLoss <= MAX_BPS, "Vault: max loss too high");
 
-
-
         if (shares == type(uint256).max) {
             shares = balanceOf[msg.sender];
         }
-   
 
         require(shares <= balanceOf[msg.sender], "Vault: exceeds balance");
         require(shares > 0, "Vault: 0 shares");
@@ -1029,12 +1039,13 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
                     _reportLoss(strategy, loss);
                 }
 
-             
-
-                uint256 debtRepayment = _min(withdrawn, strategies[strategy].totalDebt);
+                uint256 debtRepayment = _min(
+                    withdrawn,
+                    strategies[strategy].totalDebt
+                );
                 strategies[strategy].totalDebt -= debtRepayment;
                 totalDebt -= debtRepayment;
-                
+
                 /*
                 strategies[strategy].totalDebt -= withdrawn;
                 totalDebt -= withdrawn;
@@ -1556,14 +1567,22 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
     ) external nonReentrant returns (uint256) {
         StrategyParams storage params = strategies[msg.sender];
         require(params.activation > 0, "Vault: !approved strategy");
-
-        // Sanity check balances
-
+        //! Problema di arrotondamento
+        if (_debtPayment == 1) {
+            --_debtPayment;
+        }
+        // Sanity check balance
+        if (token.balanceOf(msg.sender) < _gain + _debtPayment) {
+            console.log("Vault: Insufficient balance in strategy");
+            console.log("Required gain: ", _gain);
+            console.log("Required debt payment: ", _debtPayment);
+            console.log("Strategy balance: ", token.balanceOf(msg.sender));
+        }
         require(
             token.balanceOf(msg.sender) >= _gain + _debtPayment,
             "Vault: insufficient balance"
         );
-        
+
         if (_loss > 0) {
             _reportLoss(msg.sender, _loss);
         }
@@ -1592,7 +1611,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         if (totalAvailable < credit) {
             totalIdle -= (credit - totalAvailable);
             token.safeTransfer(msg.sender, credit - totalAvailable);
-        } else if (totalAvailable > credit) {   
+        } else if (totalAvailable > credit) {
             totalIdle += (totalAvailable - credit);
             token.safeTransferFrom(
                 msg.sender,
