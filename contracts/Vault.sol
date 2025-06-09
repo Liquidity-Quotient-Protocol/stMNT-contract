@@ -1572,6 +1572,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
             --_debtPayment;
         }
         // Sanity check balance
+        //! Commenti per test
         if (token.balanceOf(msg.sender) < _gain + _debtPayment) {
             console.log("Vault: Insufficient balance in strategy");
             console.log("Required gain: ", _gain);

@@ -165,15 +165,29 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         override
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
-        (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
+        (uint256 currentProfit, uint256 currentLoss, ) = _returnDepositPlatformValue();
+        _profit = currentProfit;
+        _loss = currentLoss;
 
-        if (want.balanceOf(address(this)) < _profit) {
-            uint256 _amountNeeded = _profit - want.balanceOf(address(this));
-            if (_amountNeeded > 0) {
-                (uint256 liquidated, uint256 lossFromLiq) = liquidatePosition(
-                    _amountNeeded
-                );
-                _loss += lossFromLiq;
+
+        if (_debtOutstanding > 0) {
+            _debtPayment = _debtOutstanding;
+            uint256 neededLiquid = _debtPayment + _profit;
+            uint256 currentLiquid = want.balanceOf(address(this));
+
+
+           if (currentLiquid < neededLiquid) {
+                uint256 amountToLiquidate = neededLiquid - currentLiquid;
+                (, uint256 lossOnLiq) = liquidatePosition(amountToLiquidate);
+                _loss += lossOnLiq; 
+            }
+        }else{
+            _debtPayment = 0;
+            uint256 currentLiquid = want.balanceOf(address(this));
+            if (currentLiquid < _profit) {
+                uint256 amountToLiquidate = _profit - currentLiquid;
+                (, uint256 lossOnLiq) = liquidatePosition(amountToLiquidate);
+                _loss += lossOnLiq;
             }
         }
         if (_profit > 0) {

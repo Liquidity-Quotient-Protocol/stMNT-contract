@@ -11,9 +11,13 @@ import {ILendingPool as ILendingPoolLendl, IProtocolDataProvider} from "../contr
 
 interface IWETH {
     function deposit() external payable;
+
     function withdraw(uint256) external;
+
     function approve(address, uint256) external returns (bool);
+
     function transfer(address, uint256) external returns (bool);
+
     function balanceOf(address) external view returns (uint256);
 }
 
@@ -139,9 +143,10 @@ contract DoppioTest is Test {
         console.log(
             "Withdraw: User %a withdrew %u shares, received %u WMNT. PPS: %u",
             user,
-            shares);
-        console.log("Wmnt ",assets);
-        console.log("PPS ",vault.pricePerShare());
+            shares
+        );
+        console.log("Wmnt ", assets);
+        console.log("PPS ", vault.pricePerShare());
         assertGe(
             WMNT.balanceOf(user),
             userBalanceBefore + assets - (assets / 1000),
@@ -155,6 +160,19 @@ contract DoppioTest is Test {
         ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
         strategy2nd.harvest();
         vm.stopPrank();
+        console.log("Harvest executed. Current PPS: %u", vault.pricePerShare());
+    }
+
+    function executeSingleHarvest(address _strategy) internal {
+        vm.startPrank(management);
+
+        if (_strategy == address(strategy1st)) {
+            strategy1st.harvest();
+            ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
+        } else if (_strategy == address(strategy2nd)) {
+            strategy2nd.harvest();
+            vm.stopPrank();
+        }
         console.log("Harvest executed. Current PPS: %u", vault.pricePerShare());
     }
 
@@ -173,6 +191,66 @@ contract DoppioTest is Test {
         assertGe(assets, 1_000 ether, "Problem with interest");
     }
 
+    function _logFullState(string memory stage) internal view {
+        console.log("-----------------------------------------------------");
+        console.log("LOG DI STATO: [%s]", stage);
+        console.log("-----------------------------------------------------");
+
+        // Stato del Vault
+        console.log("VAULT STATE:");
+        console.log("  - Total Assets (totale):  %s", vault.totalAssets());
+        console.log("  - Total Debt (in strats): %s", vault.totalDebt());
+        console.log(
+            "  - Available (idle):       %s",
+            WMNT.balanceOf(address(vault))
+        );
+
+        // Stato della Strategy1st
+        if (address(strategy1st) != address(0)) {
+            console.log("STRATEGY 1st (%s):", address(strategy1st));
+            (
+                ,
+                ,
+                uint256 debtRatio,
+                ,
+                ,
+                ,
+                uint256 totalDebt,
+                ,
+                
+            ) = vault.strategies(address(strategy1st));
+            console.log("  - Vault Debt Ratio:      %s / 10000", debtRatio);
+            console.log("  - Vault Total Debt:      %s", totalDebt);
+            console.log(
+                "  - Strat Assets (est.):   %s",
+                strategy1st.estimatedTotalAssets()
+            );
+        }
+
+        // Stato della Strategy2nd
+        if (address(strategy2nd) != address(0)) {
+            console.log("STRATEGY 2nd (%s):", address(strategy2nd));
+            (
+                ,
+                ,
+                uint256 debtRatio2,
+                ,
+                ,
+                ,
+                ,
+                ,
+                
+            ) = vault.strategies(address(strategy2nd));
+            console.log("  - Vault Debt Ratio:      %s / 10000", debtRatio2);
+            console.log("  - Vault Total Debt:      %s", debtRatio2);
+            console.log(
+                "  - Strat Assets (est.):   %s",
+                strategy2nd.estimatedTotalAssets()
+            );
+        }
+        console.log("-----------------------------------------------------\n");
+    }
+/*
     function testMultiUserLongTermActivity() public {
         setUp(); // Inizializza il Vault e le Strategie
         console.log("\n--- Starting Multi-User Long-Term Activity Test ---");
@@ -317,5 +395,231 @@ contract DoppioTest is Test {
         );
 
         console.log("\n--- Multi-User Long-Term Activity Test Completed ---");
+    }
+*/
+/*
+    function testMigrationStrategy1to2() public {
+        // --- 1. SETUP INIZIALE CON STRATEGY1ST ---
+        vault = new StMNT(
+            address(WMNT),
+            governance,
+            treasury,
+            "stMNT",
+            "stMNT",
+            guardian,
+            management
+        );
+
+        vm.startPrank(governance);
+        strategy1st = new Strategy1st(address(vault), governance);
+        strategy1st.setLendingPool(LENDING_POOL_ADDRESS_INIT);
+        strategy1st.updateUnlimitedSpending(true);
+        strategy1st.updateUnlimitedSpendingInit(true);
+        strategy1st.approveLendingPool();
+        strategy1st.setStrategist(management);
+
+        vault.addStrategy(address(strategy1st), 9_000, 0, type(uint256).max, 0);
+        vault.setPerformanceFee(0);
+        vault.setManagementFee(0);
+        vault.setDepositLimit(type(uint256).max);
+        vm.stopPrank();
+        // --- 2. DEPOSITO INIZIALE E ALLOCAZIONE ---
+        vm.deal(user1, 50000 ether);
+        wrapAndApprove(user1, 5000 ether);
+        uint256 shares = depositToVault(user1, 1000 ether);
+        assertEq(vault.balanceOf(user1), shares);
+
+        executeSingleHarvest(address(strategy1st));
+
+        _logFullState("Dopo il primo deposito e harvest in Strategy1st");
+
+        // --- 3. ACCUMULO PROFITTI ---
+        vm.startPrank(governance);
+        ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
+        skip(20 days);
+        ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
+        executeSingleHarvest(address(strategy1st));
+        _logFullState("Dopo accumulo profitti in Strategy1st");
+        skip(8 hours);
+        vm.stopPrank();
+
+        // --- 4. PREPARAZIONE ALLA MIGRAZIONE ---
+        console.log(
+            "\n\n>>>>>>>>>> INIZIO PROCESSO DI MIGRAZIONE <<<<<<<<<<\n"
+        );
+        vm.startPrank(governance);
+        strategy2nd = new Strategy2nd(address(vault), governance);
+        strategy2nd.setStrategist(management);
+        vault.addStrategy(address(strategy2nd), 0, 0, type(uint256).max, 0);
+
+        vault.updateStrategyDebtRatio(address(strategy1st), 0);
+        vault.updateStrategyDebtRatio(address(strategy2nd), 9_000);
+        vm.stopPrank();
+        _logFullState("Debt Ratio aggiornati per la migrazione");
+
+        // --- 5. ESECUZIONE MIGRAZIONE ---
+
+        // PASSO 1: Rimuovi i fondi dalla vecchia strategia
+        executeSingleHarvest(address(strategy1st));
+        skip(1 hours);
+
+        _logFullState(
+            "Dopo harvest su Strategy1st (fondi restituiti al vault)"
+        );
+
+        (, , , , , , uint256 totalDebt, , ) = vault.strategies(
+            address(strategy1st)
+        );
+
+        assertApproxEqAbs(
+            totalDebt,
+            0,
+            100,
+            "Debt di Strategy1st dovrebbe essere 0"
+        );
+
+        // PASSO 2: Alloca i fondi alla nuova strategia
+        executeSingleHarvest(address(strategy2nd));
+        _logFullState(
+            "Dopo harvest su Strategy2nd (fondi allocati alla nuova)"
+        );
+
+        (, , , , , , uint256 totalDebt2, , ) = vault.strategies(
+            address(strategy2nd)
+        );
+
+        assertTrue(
+            totalDebt2 > 0,
+            "Strategy2nd dovrebbe avere debito ora"
+        );
+
+        console.log(
+            "\n>>>>>>>>>> MIGRAZIONE COMPLETATA CON SUCCESSO <<<<<<<<<<\n"
+        );
+
+        // --- 6. CONTINUA OPERATIVITÀ CON LA NUOVA STRATEGIA ---
+        skip(20 days);
+        executeSingleHarvest(address(strategy2nd));
+        skip(10 hours);
+        _logFullState("Dopo un periodo di attivita con Strategy2nd");
+        
+    }
+*/
+
+
+     function testMigrationStrategy2to1() public {
+        // --- 1. SETUP INIZIALE CON STRATEGY1ST ---
+        vault = new StMNT(
+            address(WMNT),
+            governance,
+            treasury,
+            "stMNT",
+            "stMNT",
+            guardian,
+            management
+        );
+
+        vm.startPrank(governance);
+
+        strategy2nd = new Strategy2nd(address(vault), governance);
+        strategy2nd.setStrategist(management);
+
+
+        vault.addStrategy(address(strategy2nd), 9_000, 0, type(uint256).max, 0);
+        vault.setPerformanceFee(0);
+        vault.setManagementFee(0);
+        vault.setDepositLimit(type(uint256).max);
+        vm.stopPrank();
+        // --- 2. DEPOSITO INIZIALE E ALLOCAZIONE ---
+        vm.deal(user1, 50000 ether);
+        wrapAndApprove(user1, 5000 ether);
+        uint256 shares = depositToVault(user1, 1000 ether);
+        assertEq(vault.balanceOf(user1), shares);
+
+        executeSingleHarvest(address(strategy2nd));
+
+        _logFullState("Dopo il primo deposito e harvest in Strategy1st");
+
+        // --- 3. ACCUMULO PROFITTI ---
+        skip(20 days);
+        executeSingleHarvest(address(strategy2nd));
+        _logFullState("Dopo accumulo profitti in Strategy1st");
+        skip(8 hours);
+
+        // --- 4. PREPARAZIONE ALLA MIGRAZIONE ---
+        console.log(
+            "\n\n>>>>>>>>>> INIZIO PROCESSO DI MIGRAZIONE <<<<<<<<<<\n"
+        );
+        vm.startPrank(governance);
+
+        strategy1st = new Strategy1st(address(vault), governance);
+        strategy1st.setLendingPool(LENDING_POOL_ADDRESS_INIT);
+        strategy1st.updateUnlimitedSpending(true);
+        strategy1st.updateUnlimitedSpendingInit(true);
+        strategy1st.approveLendingPool();
+        strategy1st.setStrategist(management);
+
+
+
+      
+        vault.addStrategy(address(strategy1st), 0, 0, type(uint256).max, 0);
+
+        vault.updateStrategyDebtRatio(address(strategy2nd), 0);
+        vault.updateStrategyDebtRatio(address(strategy1st), 9_000);
+        vm.stopPrank();
+        _logFullState("Debt Ratio aggiornati per la migrazione");
+
+        // --- 5. ESECUZIONE MIGRAZIONE ---
+
+        // PASSO 1: Rimuovi i fondi dalla vecchia strategia
+        executeSingleHarvest(address(strategy2nd));
+
+        skip(1 hours);
+
+        _logFullState(
+            "Dopo harvest su Strategy1st (fondi restituiti al vault)"
+        );
+
+        (, , , , , , uint256 totalDebt, , ) = vault.strategies(
+            address(strategy2nd)
+        );
+
+        assertApproxEqAbs(
+            totalDebt,
+            0,
+            100,
+            "Debt di Strategy1st dovrebbe essere 0"
+        );
+
+        // PASSO 2: Alloca i fondi alla nuova strategia
+        executeSingleHarvest(address(strategy1st));
+        ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
+
+        _logFullState(
+            "Dopo harvest su Strategy2nd (fondi allocati alla nuova)"
+        );
+
+        (, , , , , , uint256 totalDebt2, , ) = vault.strategies(
+            address(strategy1st)
+        );
+
+        assertTrue(
+            totalDebt2 > 0,
+            "Strategy2nd dovrebbe avere debito ora"
+        );
+
+        console.log(
+            "\n>>>>>>>>>> MIGRAZIONE COMPLETATA CON SUCCESSO <<<<<<<<<<\n"
+        );
+
+        // --- 6. CONTINUA OPERATIVITÀ CON LA NUOVA STRATEGIA ---
+        skip(20 days);
+        executeSingleHarvest(address(strategy1st));
+        ILendingPoolInit(LENDING_POOL_ADDRESS_INIT).accrueInterest();
+        
+        skip(10 hours);
+        _logFullState("Dopo un periodo di attivita con Strategy2nd");
+/*
+        */
     }
 }

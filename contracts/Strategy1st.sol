@@ -41,11 +41,11 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
     /// @notice Immutable address of the WMNT (Wrapped MNT) token, the 'want' token for this strategy.
     address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
-    
+
     /// @notice Address of the Init Protocol Lending Pool where funds are deposited.
     /// @dev Must be set by the owner via `setLendingPool()`.
     address public lendingPool;
-    
+
     /// @notice Internal accounting of the shares (or equivalent units) held by the strategy in the `lendingPool`.
     uint256 private balanceShare;
 
@@ -55,7 +55,11 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @param share The amount of shares involved in the problematic operation.
      * @param balanceShare The strategy's internal `balanceShare` at the time.
      */
-    event ProblemWithWithdrawStrategy(uint256 time, uint256 share, uint256 balanceShare);
+    event ProblemWithWithdrawStrategy(
+        uint256 time,
+        uint256 share,
+        uint256 balanceShare
+    );
 
     /**
      * @notice Constructs the Strategy1st contract.
@@ -65,11 +69,15 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     constructor(
         address _vault,
         address _owner
+    )
         // Removed explicit _initAddr param here as Iinit parent likely takes it from state or constant.
         // If your Iinit constructor *requires* it, it should be:
         // constructor(address _vault, address _owner, address __initAddr) BaseStrategy(_vault) Iinit(__initAddr) Ownable(_owner) {}
         // For now, assuming Iinit(_initAddr) works with the state variable.
-    ) BaseStrategy(_vault) Iinit(_initAddr) Ownable(_owner) {
+        BaseStrategy(_vault)
+        Iinit(_initAddr)
+        Ownable(_owner)
+    {
         // Initialization is handled by parent constructors.
     }
 
@@ -79,7 +87,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @param _lendingPool The address of the LendingPool contract.
      */
     function setLendingPool(address _lendingPool) external onlyOwner {
-        require(_lendingPool != address(0), "Strategy1st: Invalid LendingPool address.");
+        require(
+            _lendingPool != address(0),
+            "Strategy1st: Invalid LendingPool address."
+        );
         lendingPool = _lendingPool;
     }
 
@@ -91,7 +102,11 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     function updateUnlimitedSpending(bool _approve) external onlyOwner {
         if (_approve) {
             SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
-            SafeERC20v4.safeApprove(IERC20v4(want), address(vault), type(uint256).max);
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
+                address(vault),
+                type(uint256).max
+            );
         } else {
             SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
         }
@@ -106,7 +121,11 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         if (_approve) {
             // Original code approved address(vault) then _initAddr. Assuming intent is to approve _initAddr.
             SafeERC20v4.safeApprove(IERC20v4(want), _initAddr, 0);
-            SafeERC20v4.safeApprove(IERC20v4(want), _initAddr, type(uint256).max);
+            SafeERC20v4.safeApprove(
+                IERC20v4(want),
+                _initAddr,
+                type(uint256).max
+            );
         } else {
             SafeERC20v4.safeApprove(IERC20v4(want), _initAddr, 0);
         }
@@ -117,7 +136,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @dev Owner-only. Use if direct interaction with `lendingPool` requires it to pull 'want' tokens.
      */
     function approveLendingPool() external onlyOwner {
-        require(lendingPool != address(0), "Strategy1st: LendingPool not set for approval.");
+        require(
+            lendingPool != address(0),
+            "Strategy1st: LendingPool not set for approval."
+        );
         SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
         SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, type(uint256).max);
     }
@@ -137,7 +159,8 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @return The total estimated value of assets in 'want' tokens.
      */
     function estimatedTotalAssets() public view override returns (uint256) {
-        if (lendingPool == address(0)) { // Prevent calls to address(0) if not set
+        if (lendingPool == address(0)) {
+            // Prevent calls to address(0) if not set
             return want.balanceOf(address(this));
         }
         require(
@@ -171,20 +194,37 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         if (lendingPool != address(0)) {
             ILendingPool(lendingPool).accrueInterest();
         }
-        (_profit, _loss, _debtPayment) = _returnDepositPlatformValue();
+        (uint256 currentProfit, uint256 currentLoss, ) = _returnDepositPlatformValue();
+        _profit = currentProfit;
+        _loss = currentLoss;
 
-        if (want.balanceOf(address(this)) < _profit) {
-            uint256 _amountNeeded = _profit - want.balanceOf(address(this));
-            if (_amountNeeded > 0) { // Only liquidate if actually needed
-                (uint256 liquidated, uint256 lossFromLiq) = liquidatePosition(_amountNeeded);
-                _loss += lossFromLiq;
+
+        if (_debtOutstanding > 0) {
+            _debtPayment = _debtOutstanding;
+            uint256 neededLiquid = _debtPayment + _profit;
+            uint256 currentLiquid = want.balanceOf(address(this));
+
+
+           if (currentLiquid < neededLiquid) {
+                uint256 amountToLiquidate = neededLiquid - currentLiquid;
+                (, uint256 lossOnLiq) = liquidatePosition(amountToLiquidate);
+                _loss += lossOnLiq; 
+            }
+        }else{
+            _debtPayment = 0;
+            uint256 currentLiquid = want.balanceOf(address(this));
+            if (currentLiquid < _profit) {
+                uint256 amountToLiquidate = _profit - currentLiquid;
+                (, uint256 lossOnLiq) = liquidatePosition(amountToLiquidate);
+                _loss += lossOnLiq;
             }
         }
+
         if (_profit > 0) {
-            _profit = _profit - 1; 
+            _profit = _profit - 1;
         }
     }
-    
+
     /**
      * @notice Adjusts the strategy's investment position.
      * @dev Called by `harvest` after reporting to the Vault. Invests excess liquid 'want'
@@ -198,7 +238,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
             if (_amountToInvest > 0) {
                 bool success = _investInStrategy(_amountToInvest);
-                require(success, "Strategy1st: Investment failed in adjustPosition.");
+                require(
+                    success,
+                    "Strategy1st: Investment failed in adjustPosition."
+                );
             }
         }
     }
@@ -219,14 +262,20 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         }
 
         uint256 amountToWithdraw = _amountNeeded - balance;
-        (uint256 amountFreed, uint256 lossFromWithdraw) = _withdrawSingleAmount(amountToWithdraw); // Use both return values
+        (uint256 amountFreed, uint256 lossFromWithdraw) = _withdrawSingleAmount(
+            amountToWithdraw
+        ); // Use both return values
         _loss = lossFromWithdraw; // Assign loss from withdrawal
 
         _liquidatedAmount = balance + amountFreed;
-        
+
         // If still not enough, and no loss was reported by _withdrawSingleAmount for this shortfall.
         // This implies _withdrawSingleAmount returned less than amountToWithdraw without reporting a full loss for it.
-        if (_liquidatedAmount < _amountNeeded && _loss == 0 && amountFreed < amountToWithdraw) {
+        if (
+            _liquidatedAmount < _amountNeeded &&
+            _loss == 0 &&
+            amountFreed < amountToWithdraw
+        ) {
             _loss += (amountToWithdraw - amountFreed);
         }
     }
@@ -335,10 +384,16 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         uint256 _amount
     ) internal returns (bool success) {
         if (_amount == 0) return true; // No action needed if amount is zero
-        require(lendingPool != address(0), "Strategy1st: LendingPool not set for _investInStrategy.");
+        require(
+            lendingPool != address(0),
+            "Strategy1st: LendingPool not set for _investInStrategy."
+        );
 
         uint256 share = depositInit(lendingPool, WMNT, _amount, address(this));
-        require(share > 0, "Strategy1st: depositInit returned zero shares for a non-zero deposit.");
+        require(
+            share > 0,
+            "Strategy1st: depositInit returned zero shares for a non-zero deposit."
+        );
         balanceShare += share;
         success = true;
     }
@@ -354,18 +409,24 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     function _withdrawSingleAmount(
         uint256 _amount
     ) internal returns (uint256 returnAmount_, uint256 loss_) {
-        if (_amount == 0) return (0,0);
-        require(lendingPool != address(0), "Strategy1st: LendingPool not set for _withdrawSingleAmount.");
-        require(balanceShare > 0, "Strategy1st: No shares to withdraw in _withdrawSingleAmount.");
+        if (_amount == 0) return (0, 0);
+        require(
+            lendingPool != address(0),
+            "Strategy1st: LendingPool not set for _withdrawSingleAmount."
+        );
+        require(
+            balanceShare > 0,
+            "Strategy1st: No shares to withdraw in _withdrawSingleAmount."
+        );
 
         uint256 sharesToWithdraw = ILendingPool(lendingPool).toShares(_amount);
 
         if (sharesToWithdraw == 0 && _amount > 0) {
             // Cannot get the desired amount as it translates to 0 shares.
             // This can be treated as a failure to retrieve the amount, hence a loss of that amount.
-            return (0, _amount); 
+            return (0, _amount);
         }
-        
+
         if (sharesToWithdraw > balanceShare) {
             // If calculated shares for the desired '_amount' exceed current 'balanceShare',
             // only process the available 'balanceShare'.
@@ -373,12 +434,18 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         }
 
         balanceShare -= sharesToWithdraw;
-        returnAmount_ = withdrawInit(lendingPool, sharesToWithdraw, address(this));
-        
-        // Calculate the expected 'want' amount for the 'sharesToWithdraw' that were actually processed.
-        uint256 expectedWantForSharesProcessed = ILendingPool(lendingPool).toAmt(sharesToWithdraw);
+        returnAmount_ = withdrawInit(
+            lendingPool,
+            sharesToWithdraw,
+            address(this)
+        );
 
-        if (returnAmount_ < (expectedWantForSharesProcessed * 999) / 1000) { // 0.1% tolerance
+        // Calculate the expected 'want' amount for the 'sharesToWithdraw' that were actually processed.
+        uint256 expectedWantForSharesProcessed = ILendingPool(lendingPool)
+            .toAmt(sharesToWithdraw);
+
+        if (returnAmount_ < (expectedWantForSharesProcessed * 999) / 1000) {
+            // 0.1% tolerance
             loss_ = expectedWantForSharesProcessed - returnAmount_;
         } else {
             loss_ = 0;
@@ -398,15 +465,19 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
 
         if (balanceShare > 0) {
             uint256 sharesToWithdrawAll = balanceShare;
-            
+
             try ILendingPool(lendingPool).accrueInterest() {} catch {
                 // Optional: Log or handle. Continue recall even if accrue fails.
             }
 
             // Call withdrawInit to burn all shares held by the strategy.
             // The amount received will be reflected in this contract's 'want' balance.
-            /* uint256 amountReceived = */ withdrawInit(lendingPool, sharesToWithdrawAll, address(this));
-            
+            /* uint256 amountReceived = */ withdrawInit(
+                lendingPool,
+                sharesToWithdrawAll,
+                address(this)
+            );
+
             balanceShare = 0; // All shares are considered withdrawn from strategy's perspective.
         }
         success = true;
@@ -440,6 +511,6 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
      * @return True if the strategy is in emergency exit mode, false otherwise.
      */
     function getEmergencyExitFlag() external view returns (bool) {
-        return emergencyExit; 
+        return emergencyExit;
     }
 }
