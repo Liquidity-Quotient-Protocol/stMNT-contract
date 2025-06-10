@@ -1191,6 +1191,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
         strategies[_strategy].debtRatio = _debtRatio;
         debtRatio += _debtRatio;
 
+
         require(debtRatio <= MAX_BPS, "Vault: debtRatio overflow");
 
         emit StrategyUpdateDebtRatio(_strategy, _debtRatio);

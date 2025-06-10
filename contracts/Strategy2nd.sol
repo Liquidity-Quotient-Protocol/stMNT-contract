@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.12;
-pragma experimental ABIEncoderV2;
 
 import {BaseStrategy, StrategyParams} from "@yearnvaults/contracts/BaseStrategy.sol";
 import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol";

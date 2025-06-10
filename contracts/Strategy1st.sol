@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 
 pragma solidity ^0.8.12;
-pragma experimental ABIEncoderV2;
 
 // console import is for debugging and should be removed for production.
  import {console} from "forge-std/Test.sol";

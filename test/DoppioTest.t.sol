@@ -65,8 +65,8 @@ contract DoppioTest is Test {
         strategy1st.updateUnlimitedSpendingInit(true);
         strategy1st.approveLendingPool();
 
-        strategy2nd = new Strategy2nd(address(vault), governance); 
-        strategy2nd.updateUnlimitedSpending(true); 
+        strategy2nd = new Strategy2nd(address(vault), governance);
+        strategy2nd.updateUnlimitedSpending(true);
 
         vault.addStrategy(
             address(strategy1st),
@@ -170,7 +170,6 @@ contract DoppioTest is Test {
         vm.startPrank(user);
         uint256 userBalanceBefore = WMNT.balanceOf(user);
 
-
         console.log("DEBUG: Attempting withdrawal for user %a.", user);
         console.log("DEBUG: User shares to withdraw: %u.", shares);
         console.log(
@@ -244,7 +243,6 @@ contract DoppioTest is Test {
         console.log("LOG DI STATO: [%s]", stage);
         console.log("-----------------------------------------------------");
 
-        
         console.log("VAULT STATE:");
         console.log("  - Total Assets (totale):  %s", vault.totalAssets());
         console.log("  - Total Debt (in strats): %s", vault.totalDebt());
@@ -253,7 +251,6 @@ contract DoppioTest is Test {
             WMNT.balanceOf(address(vault))
         );
 
-      
         if (address(strategy1st) != address(0)) {
             console.log("STRATEGY 1st (%s):", address(strategy1st));
             (, , uint256 debtRatio, , , , uint256 totalDebt, , ) = vault
@@ -266,7 +263,6 @@ contract DoppioTest is Test {
             );
         }
 
-   
         if (address(strategy2nd) != address(0)) {
             console.log("STRATEGY 2nd (%s):", address(strategy2nd));
             (, , uint256 debtRatio2, , , , , , ) = vault.strategies(
@@ -283,10 +279,9 @@ contract DoppioTest is Test {
     }
 
     function testMultiUserLongTermActivity() public {
-        setUp(); 
+        setUp();
         console.log("\n--- Starting Multi-User Long-Term Activity Test ---");
 
-       
         wrapAndApprove(user1, 1000 ether);
         depositToVault(user1, 500 ether);
 
@@ -302,8 +297,7 @@ contract DoppioTest is Test {
         wrapAndApprove(user5, 1000 ether);
         depositToVault(user5, 450 ether);
 
-  
-        wrapAndApprove(longTermUser, 1000 ether); 
+        wrapAndApprove(longTermUser, 1000 ether);
         uint256 longTermDepositAmount = 100 ether;
         uint256 longTermShares = depositToVault(
             longTermUser,
@@ -315,21 +309,19 @@ contract DoppioTest is Test {
             "Long-term user shares mismatch"
         );
 
-        executeHarvest(); 
+        executeHarvest();
 
         // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
         uint256 totalDays = 365 * 2; // 2 anni
         uint256 daysPassed = 0;
         uint256 harvestCounter = 0;
 
-    
         address[] memory activeUsers = new address[](5);
         activeUsers[0] = user1;
         activeUsers[1] = user2;
         activeUsers[2] = user3;
         activeUsers[3] = user4;
         activeUsers[4] = user5;
-
 
         while (daysPassed < totalDays) {
             uint256 i = 0;
@@ -342,13 +334,11 @@ contract DoppioTest is Test {
             vm.warp(block.timestamp + daysToAdvance * 1 days);
             daysPassed += daysToAdvance;
 
-         
             if (harvestCounter % 2 == 0) {
                 executeHarvest();
             }
             harvestCounter++;
 
-    
             uint256 randomValue = uint256(
                 keccak256(abi.encodePacked(block.timestamp, i))
             ); // Simula casualità
@@ -357,7 +347,7 @@ contract DoppioTest is Test {
 
             if (randomValue % 10 < 7) {
                 // ~70% di probabilità di depositare
-                uint256 depositAmount = (randomValue % 100 ether) + 1 ether; 
+                uint256 depositAmount = (randomValue % 100 ether) + 1 ether;
                 wrapAndApprove(currentUser, depositAmount);
                 depositToVault(currentUser, depositAmount);
             } else if (randomValue % 10 < 9) {
@@ -410,8 +400,7 @@ contract DoppioTest is Test {
             "Long-term user should have made a profit or at least broken even."
         );
 
-
-        uint256 expectedMinProfit = (longTermDepositAmount * 2) / 100; // Esempio: 2% 
+        uint256 expectedMinProfit = (longTermDepositAmount * 2) / 100; // Esempio: 2%
         assertGe(
             profit,
             expectedMinProfit,
@@ -422,7 +411,6 @@ contract DoppioTest is Test {
     }
 
     function testMigrationStrategy1to2() public {
-      
         vault = new StMNT(
             address(WMNT),
             governance,
@@ -482,7 +470,6 @@ contract DoppioTest is Test {
 
         // --- 5. ESECUZIONE MIGRAZIONE ---
 
-      
         executeSingleHarvest(address(strategy1st));
         skip(1 hours);
 
@@ -632,7 +619,7 @@ contract DoppioTest is Test {
     }
 
     function testMultiUserLongTermActivityWithFee() public {
-        setUpWithFee(); 
+        setUpWithFee();
         console.log(
             "\n--- Starting Multi-User Long-Term Activity Test with Fees ---"
         );
@@ -666,7 +653,7 @@ contract DoppioTest is Test {
             "Long-term user shares mismatch"
         );
 
-        executeHarvest(); 
+        executeHarvest();
 
         // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
         uint256 totalDays = 365 * 2; // 2 anni
@@ -681,7 +668,6 @@ contract DoppioTest is Test {
         activeUsers[3] = user4;
         activeUsers[4] = user5;
 
- 
         while (daysPassed < totalDays) {
             uint256 i = 0;
             uint256 daysToAdvance = 0;
@@ -693,7 +679,6 @@ contract DoppioTest is Test {
             vm.warp(block.timestamp + daysToAdvance * 1 days);
             daysPassed += daysToAdvance;
 
-      
             if (harvestCounter % 2 == 0) {
                 executeHarvest();
             }
@@ -761,7 +746,6 @@ contract DoppioTest is Test {
             "Long-term user should have made a profit or at least broken even."
         );
 
-   
         uint256 expectedMinProfit = (longTermDepositAmount * 1) / 100; // Esempio: 2% profitto sui 2 anni
         assertGe(
             profit,
@@ -782,7 +766,6 @@ contract DoppioTest is Test {
         console.log("Management Fee (BPS): %s", vault.managementFee());
         console.log("Rewards Recipient Address: %s", rewardsRecipient);
 
-   
         uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
         assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
 
@@ -796,8 +779,8 @@ contract DoppioTest is Test {
 
         // Eseguiamo una serie di cicli di tempo e harvest per accumulare commissioni
         for (uint i = 0; i < 10; i++) {
-            vm.warp(block.timestamp + 30 days); 
-            executeHarvest(); 
+            vm.warp(block.timestamp + 30 days);
+            executeHarvest();
         }
 
         console.log("\n--- End of Simulation Period ---");
@@ -806,13 +789,11 @@ contract DoppioTest is Test {
         // --- VERIFICA DELLA RACCOLTA DELLE COMMISSIONI ---
         console.log("\n--- Verifying Fee Collection ---");
 
-
         uint256 finalRewardsShares = vault.balanceOf(rewardsRecipient);
         console.log(
             "Vault shares collected by rewards address: %u",
             finalRewardsShares
         );
-
 
         assertTrue(
             finalRewardsShares > initialRewardsShares,
@@ -823,7 +804,6 @@ contract DoppioTest is Test {
         console.log(
             "Rewards recipient is now withdrawing collected fee shares..."
         );
-
 
         vm.deal(rewardsRecipient, 1 ether);
         vm.startPrank(rewardsRecipient);
@@ -839,7 +819,6 @@ contract DoppioTest is Test {
             withdrawnFeesInWMNT
         );
 
-      
         assertTrue(
             withdrawnFeesInWMNT > 0,
             "Withdrawn fees in WMNT should be greater than 0"
@@ -901,7 +880,6 @@ contract DoppioTest is Test {
         console.log("Management Fee (BPS): %s", vault.managementFee());
         console.log("Rewards Recipient Address: %s", rewardsRecipient);
 
-
         uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
         assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
 
@@ -936,7 +914,6 @@ contract DoppioTest is Test {
             finalRewardsShares
         );
 
-
         assertTrue(
             finalRewardsShares > initialRewardsShares,
             "Rewards address should have collected vault shares"
@@ -948,8 +925,7 @@ contract DoppioTest is Test {
             "Rewards recipient is now withdrawing collected fee shares..."
         );
 
-
-        vm.deal(rewardsRecipient, 1 ether); 
+        vm.deal(rewardsRecipient, 1 ether);
         vm.startPrank(rewardsRecipient);
         uint256 withdrawnFeesInWMNT = vault.withdraw(
             finalRewardsShares,
@@ -962,7 +938,6 @@ contract DoppioTest is Test {
             "Amount of WMNT collected by redeeming fee shares: %u",
             withdrawnFeesInWMNT
         );
-
 
         assertTrue(
             withdrawnFeesInWMNT > 0,
@@ -984,7 +959,6 @@ contract DoppioTest is Test {
         console.log("Management Fee (BPS): %s", vault.managementFee());
         console.log("Rewards Recipient Address: %s", rewardsRecipient);
 
-     
         uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
         assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
 
@@ -1013,14 +987,12 @@ contract DoppioTest is Test {
         // --- VERIFICA DELLA RACCOLTA DELLE COMMISSIONI ---
         console.log("\n--- Verifying Fee Collection ---");
 
-   
         uint256 finalRewardsShares = vault.balanceOf(rewardsRecipient);
         console.log(
             "Vault shares collected by rewards address: %u",
             finalRewardsShares
         );
 
-   
         assertTrue(
             finalRewardsShares > initialRewardsShares,
             "Rewards address should have collected vault shares"
@@ -1031,7 +1003,7 @@ contract DoppioTest is Test {
             "Rewards recipient is now withdrawing collected fee shares..."
         );
 
-        vm.deal(rewardsRecipient, 1 ether); 
+        vm.deal(rewardsRecipient, 1 ether);
         vm.startPrank(rewardsRecipient);
         uint256 withdrawnFeesInWMNT = vault.withdraw(
             finalRewardsShares,
@@ -1056,7 +1028,7 @@ contract DoppioTest is Test {
     }
 
     function testStressTestWithFeesAndBoosts() public {
-        setUpWithFee(); 
+        setUpWithFee();
         console.log(
             "\n--- Starting Long-Term Stress Test with Fees & Random Boosts ---"
         );
@@ -1078,12 +1050,12 @@ contract DoppioTest is Test {
         );
 
         // Utente "Booster" che donerà fondi
-        vm.deal(boosterUser, 10000 ether); 
+        vm.deal(boosterUser, 10000 ether);
         vm.startPrank(boosterUser);
-        WMNT.deposit{value: 10000 ether}(); 
+        WMNT.deposit{value: 10000 ether}();
         vm.stopPrank();
 
-        executeHarvest(); 
+        executeHarvest();
 
         // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
         uint256 totalDays = 365 * 2;
@@ -1140,7 +1112,7 @@ contract DoppioTest is Test {
 
             // 2. Esegui l'harvest periodico SOLO SE non c'è stato un boost in questo ciclo
             if (!boostedThisCycle && (harvestCounter % 2 == 0)) {
-                executeHarvest(); 
+                executeHarvest();
             }
             harvestCounter++;
 
@@ -1195,5 +1167,105 @@ contract DoppioTest is Test {
         );
 
         console.log("\n--- Stress Test Completato con Successo ---");
+    }
+
+    function testFullAccessControl() public {
+        setUpWithFee();
+
+        assertEq(vault.governance(), governance);
+        assertEq(vault.management(), management);
+        assertEq(vault.guardian(), guardian);
+        assertEq(vault.rewards(), treasury);
+        assertEq(vault.name(), "stMNT");
+        assertEq(vault.symbol(), "stMNT");
+        assertEq(address(vault.token()), address(WMNT));
+        assertEq(vault.performanceFee(), 100);
+        assertEq(vault.managementFee(), 100);
+        assertEq(vault.lockedProfitDegradation(), 46000000000000);
+        assertEq(vault.depositLimit(), type(uint256).max);
+
+        vm.stopPrank();
+        vm.startPrank(user1);
+        vm.expectRevert("Vault: !governance");
+        vault.setPerformanceFee(1000);
+        vm.expectRevert("Vault: !governance");
+        vault.setManagementFee(1000);
+        vm.stopPrank();
+
+        vm.startPrank(user1);
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "OwnableUnauthorizedAccount(address)",
+                address(user1)
+            )
+        );
+        strategy1st.setLendingPool(LENDING_POOL_ADDRESS_INIT);
+
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "OwnableUnauthorizedAccount(address)",
+                address(user1)
+            )
+        );
+        strategy1st.updateUnlimitedSpending(true);
+
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "OwnableUnauthorizedAccount(address)",
+                address(user1)
+            )
+        );
+        strategy1st.updateUnlimitedSpendingInit(true);
+
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "OwnableUnauthorizedAccount(address)",
+                address(user1)
+            )
+        );
+        strategy1st.approveLendingPool();
+
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "OwnableUnauthorizedAccount(address)",
+                address(user1)
+            )
+        );
+        strategy2nd.updateUnlimitedSpending(true);
+
+        vm.expectRevert("Vault: !governance");
+        vault.addStrategy(
+            address(strategy1st),
+            4_500, // 45% debtRatio
+            0,
+            type(uint256).max,
+            0
+        );
+
+        vm.expectRevert("Vault: !governance");
+        vault.addStrategy(
+            address(strategy2nd),
+            4_500, // 45% debtRatio
+            0, // minDebtPerHarvest
+            type(uint256).max, // maxDebtPerHarvest
+            0 // performanceFee
+        );
+
+        vm.expectRevert("Vault: !governance");
+        vault.setPerformanceFee(100); // performance fee 1%
+
+        vm.expectRevert("Vault: !governance");
+        vault.setManagementFee(100); // managment fee 1%
+
+        vm.expectRevert("Vault: !governance");
+        vault.setDepositLimit(type(uint256).max);
+
+        vm.expectRevert();
+        strategy1st.harvest();
+
+        vm.expectRevert();
+        strategy2nd.harvest();
+
+        vm.stopPrank();
     }
 }
