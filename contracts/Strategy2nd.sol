@@ -220,17 +220,17 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     function liquidatePosition(
         uint256 _amountNeeded
     ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
-        uint256 balance = want.balanceOf(address(this));
-        if (balance >= _amountNeeded) {
-            return (_amountNeeded, 0);
-        }
+  
 
-        uint256 amountToWithdraw = _amountNeeded - balance;
-        uint256 amountFreed = _withdrawTokenFromStrategy(amountToWithdraw);
+        uint256 amountFreed = _withdrawTokenFromStrategy(_amountNeeded);
 
-        _liquidatedAmount = balance + amountFreed;
-        if (_liquidatedAmount < _amountNeeded) {
-            _loss = _amountNeeded - _liquidatedAmount;
+        _liquidatedAmount = amountFreed;
+     if (
+            _liquidatedAmount < _amountNeeded &&
+            _loss == 0 &&
+            amountFreed < _amountNeeded
+        ) {
+            _loss += (_amountNeeded - amountFreed);
         }
     }
 

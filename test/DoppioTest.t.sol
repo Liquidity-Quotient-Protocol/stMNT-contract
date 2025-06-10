@@ -37,6 +37,7 @@ contract DoppioTest is Test {
     address public user4 = address(8);
     address public user5 = address(9);
     address public longTermUser = address(0xAA);
+    address public boosterUser = address(0xD);
 
     IWETH public constant WMNT =
         IWETH(address(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8));
@@ -64,8 +65,8 @@ contract DoppioTest is Test {
         strategy1st.updateUnlimitedSpendingInit(true);
         strategy1st.approveLendingPool();
 
-        strategy2nd = new Strategy2nd(address(vault), governance); // Usa Strategy2nd
-        strategy2nd.updateUnlimitedSpending(true); // Strategia approva Vault per 'want'
+        strategy2nd = new Strategy2nd(address(vault), governance); 
+        strategy2nd.updateUnlimitedSpending(true); 
 
         vault.addStrategy(
             address(strategy1st),
@@ -110,8 +111,8 @@ contract DoppioTest is Test {
         strategy1st.updateUnlimitedSpendingInit(true);
         strategy1st.approveLendingPool();
 
-        strategy2nd = new Strategy2nd(address(vault), governance); // Usa Strategy2nd
-        strategy2nd.updateUnlimitedSpending(true); // Strategia approva Vault per 'want'
+        strategy2nd = new Strategy2nd(address(vault), governance);
+        strategy2nd.updateUnlimitedSpending(true);
 
         vault.addStrategy(
             address(strategy1st),
@@ -169,7 +170,7 @@ contract DoppioTest is Test {
         vm.startPrank(user);
         uint256 userBalanceBefore = WMNT.balanceOf(user);
 
-        // Aggiungi questi log per debug
+
         console.log("DEBUG: Attempting withdrawal for user %a.", user);
         console.log("DEBUG: User shares to withdraw: %u.", shares);
         console.log(
@@ -243,7 +244,7 @@ contract DoppioTest is Test {
         console.log("LOG DI STATO: [%s]", stage);
         console.log("-----------------------------------------------------");
 
-        // Stato del Vault
+        
         console.log("VAULT STATE:");
         console.log("  - Total Assets (totale):  %s", vault.totalAssets());
         console.log("  - Total Debt (in strats): %s", vault.totalDebt());
@@ -252,7 +253,7 @@ contract DoppioTest is Test {
             WMNT.balanceOf(address(vault))
         );
 
-        // Stato della Strategy1st
+      
         if (address(strategy1st) != address(0)) {
             console.log("STRATEGY 1st (%s):", address(strategy1st));
             (, , uint256 debtRatio, , , , uint256 totalDebt, , ) = vault
@@ -265,7 +266,7 @@ contract DoppioTest is Test {
             );
         }
 
-        // Stato della Strategy2nd
+   
         if (address(strategy2nd) != address(0)) {
             console.log("STRATEGY 2nd (%s):", address(strategy2nd));
             (, , uint256 debtRatio2, , , , , , ) = vault.strategies(
@@ -282,10 +283,10 @@ contract DoppioTest is Test {
     }
 
     function testMultiUserLongTermActivity() public {
-        setUp(); // Inizializza il Vault e le Strategie
+        setUp(); 
         console.log("\n--- Starting Multi-User Long-Term Activity Test ---");
 
-        // --- PREPARAZIONE INIZIALE (Depositi iniziali per tutti gli utenti) ---
+       
         wrapAndApprove(user1, 1000 ether);
         depositToVault(user1, 500 ether);
 
@@ -301,8 +302,8 @@ contract DoppioTest is Test {
         wrapAndApprove(user5, 1000 ether);
         depositToVault(user5, 450 ether);
 
-        // Utente a lungo termine deposita una quantità specifica (per APY)
-        wrapAndApprove(longTermUser, 1000 ether); // Approvazione per il deposito APY
+  
+        wrapAndApprove(longTermUser, 1000 ether); 
         uint256 longTermDepositAmount = 100 ether;
         uint256 longTermShares = depositToVault(
             longTermUser,
@@ -314,14 +315,14 @@ contract DoppioTest is Test {
             "Long-term user shares mismatch"
         );
 
-        executeHarvest(); // Prima harvest dopo tutti i depositi iniziali
+        executeHarvest(); 
 
         // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
         uint256 totalDays = 365 * 2; // 2 anni
         uint256 daysPassed = 0;
         uint256 harvestCounter = 0;
 
-        // Array di utenti per interazioni dinamiche
+    
         address[] memory activeUsers = new address[](5);
         activeUsers[0] = user1;
         activeUsers[1] = user2;
@@ -329,9 +330,6 @@ contract DoppioTest is Test {
         activeUsers[3] = user4;
         activeUsers[4] = user5;
 
-        // Variabili per tracciare le shares degli utenti, se necessario per prelievi precisi
-        // mapping(address => uint256) userShares; // Non si può usare mapping in funzioni, solo come stato.
-        // Dobbiamo ottenere il saldo attuale ogni volta.
 
         while (daysPassed < totalDays) {
             uint256 i = 0;
@@ -344,16 +342,13 @@ contract DoppioTest is Test {
             vm.warp(block.timestamp + daysToAdvance * 1 days);
             daysPassed += daysToAdvance;
 
-            // Esegui la harvest in modo irregolare (ogni 5-10 giorni reali, ma qui basato su loop)
-            // Possiamo legare la harvest ad un intervallo o a una certa frequenza nel loop
+         
             if (harvestCounter % 2 == 0) {
-                // Harvest ogni 2 cicli (quindi ~6-14 giorni)
                 executeHarvest();
             }
             harvestCounter++;
 
-            // --- ATTIVITÀ UTENTE IRREGOLARE ---
-            // Usa una logica più casuale per depositi/prelievi
+    
             uint256 randomValue = uint256(
                 keccak256(abi.encodePacked(block.timestamp, i))
             ); // Simula casualità
@@ -362,7 +357,7 @@ contract DoppioTest is Test {
 
             if (randomValue % 10 < 7) {
                 // ~70% di probabilità di depositare
-                uint256 depositAmount = (randomValue % 100 ether) + 1 ether; // Tra 1 e 100 ether
+                uint256 depositAmount = (randomValue % 100 ether) + 1 ether; 
                 wrapAndApprove(currentUser, depositAmount);
                 depositToVault(currentUser, depositAmount);
             } else if (randomValue % 10 < 9) {
@@ -415,9 +410,8 @@ contract DoppioTest is Test {
             "Long-term user should have made a profit or at least broken even."
         );
 
-        // Puoi impostare un APY minimo atteso in base ai tassi di interesse reali.
-        // Ad esempio, se ti aspetti un APY minimo dell'1% annuo, in 2 anni sarebbe circa 2%.
-        uint256 expectedMinProfit = (longTermDepositAmount * 2) / 100; // Esempio: 2% profitto sui 2 anni
+
+        uint256 expectedMinProfit = (longTermDepositAmount * 2) / 100; // Esempio: 2% 
         assertGe(
             profit,
             expectedMinProfit,
@@ -428,7 +422,7 @@ contract DoppioTest is Test {
     }
 
     function testMigrationStrategy1to2() public {
-        // --- 1. SETUP INIZIALE CON STRATEGY1ST ---
+      
         vault = new StMNT(
             address(WMNT),
             governance,
@@ -488,7 +482,7 @@ contract DoppioTest is Test {
 
         // --- 5. ESECUZIONE MIGRAZIONE ---
 
-        // PASSO 1: Rimuovi i fondi dalla vecchia strategia
+      
         executeSingleHarvest(address(strategy1st));
         skip(1 hours);
 
@@ -638,12 +632,12 @@ contract DoppioTest is Test {
     }
 
     function testMultiUserLongTermActivityWithFee() public {
-        setUpWithFee(); // Inizializza il Vault e le Strategie
+        setUpWithFee(); 
         console.log(
             "\n--- Starting Multi-User Long-Term Activity Test with Fees ---"
         );
 
-        // --- PREPARAZIONE INIZIALE (Depositi iniziali per tutti gli utenti) ---
+        // --- PREPARAZIONE INIZIALE ---
         wrapAndApprove(user1, 1000 ether);
         depositToVault(user1, 500 ether);
 
@@ -672,7 +666,7 @@ contract DoppioTest is Test {
             "Long-term user shares mismatch"
         );
 
-        executeHarvest(); // Prima harvest dopo tutti i depositi iniziali
+        executeHarvest(); 
 
         // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
         uint256 totalDays = 365 * 2; // 2 anni
@@ -687,10 +681,7 @@ contract DoppioTest is Test {
         activeUsers[3] = user4;
         activeUsers[4] = user5;
 
-        // Variabili per tracciare le shares degli utenti, se necessario per prelievi precisi
-        // mapping(address => uint256) userShares; // Non si può usare mapping in funzioni, solo come stato.
-        // Dobbiamo ottenere il saldo attuale ogni volta.
-
+ 
         while (daysPassed < totalDays) {
             uint256 i = 0;
             uint256 daysToAdvance = 0;
@@ -702,16 +693,13 @@ contract DoppioTest is Test {
             vm.warp(block.timestamp + daysToAdvance * 1 days);
             daysPassed += daysToAdvance;
 
-            // Esegui la harvest in modo irregolare (ogni 5-10 giorni reali, ma qui basato su loop)
-            // Possiamo legare la harvest ad un intervallo o a una certa frequenza nel loop
+      
             if (harvestCounter % 2 == 0) {
-                // Harvest ogni 2 cicli (quindi ~6-14 giorni)
                 executeHarvest();
             }
             harvestCounter++;
 
             // --- ATTIVITÀ UTENTE IRREGOLARE ---
-            // Usa una logica più casuale per depositi/prelievi
             uint256 randomValue = uint256(
                 keccak256(abi.encodePacked(block.timestamp, i))
             ); // Simula casualità
@@ -773,8 +761,7 @@ contract DoppioTest is Test {
             "Long-term user should have made a profit or at least broken even."
         );
 
-        // Puoi impostare un APY minimo atteso in base ai tassi di interesse reali.
-        // Ad esempio, se ti aspetti un APY minimo dell'1% annuo, in 2 anni sarebbe circa 2%.
+   
         uint256 expectedMinProfit = (longTermDepositAmount * 1) / 100; // Esempio: 2% profitto sui 2 anni
         assertGe(
             profit,
@@ -795,7 +782,7 @@ contract DoppioTest is Test {
         console.log("Management Fee (BPS): %s", vault.managementFee());
         console.log("Rewards Recipient Address: %s", rewardsRecipient);
 
-        // Controlliamo il saldo iniziale di quote del destinatario delle commissioni
+   
         uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
         assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
 
@@ -809,8 +796,8 @@ contract DoppioTest is Test {
 
         // Eseguiamo una serie di cicli di tempo e harvest per accumulare commissioni
         for (uint i = 0; i < 10; i++) {
-            vm.warp(block.timestamp + 30 days); // Avanza il tempo di 30 giorni
-            executeHarvest(); // Esegui harvest per generare profitti e commissioni
+            vm.warp(block.timestamp + 30 days); 
+            executeHarvest(); 
         }
 
         console.log("\n--- End of Simulation Period ---");
@@ -819,27 +806,26 @@ contract DoppioTest is Test {
         // --- VERIFICA DELLA RACCOLTA DELLE COMMISSIONI ---
         console.log("\n--- Verifying Fee Collection ---");
 
-        // 1. Controlliamo che il destinatario abbia ricevuto delle quote del vault
+
         uint256 finalRewardsShares = vault.balanceOf(rewardsRecipient);
         console.log(
             "Vault shares collected by rewards address: %u",
             finalRewardsShares
         );
 
-        // L'asserzione più importante: il saldo delle quote deve essere maggiore di zero.
+
         assertTrue(
             finalRewardsShares > initialRewardsShares,
             "Rewards address should have collected vault shares"
         );
 
         // 2. Verifichiamo che le quote raccolte abbiano un valore reale
-        // Il destinatario delle commissioni ora "incassa" le sue quote, riscattandole per WMNT.
         console.log(
             "Rewards recipient is now withdrawing collected fee shares..."
         );
 
-        // Per prelevare, il destinatario deve avere i fondi e fare il prank
-        vm.deal(rewardsRecipient, 1 ether); // Diamo un po' di gas per la transazione
+
+        vm.deal(rewardsRecipient, 1 ether);
         vm.startPrank(rewardsRecipient);
         uint256 withdrawnFeesInWMNT = vault.withdraw(
             finalRewardsShares,
@@ -853,7 +839,7 @@ contract DoppioTest is Test {
             withdrawnFeesInWMNT
         );
 
-        // L'asserzione finale: l'importo in WMNT ricevuto deve essere maggiore di zero.
+      
         assertTrue(
             withdrawnFeesInWMNT > 0,
             "Withdrawn fees in WMNT should be greater than 0"
@@ -903,5 +889,311 @@ contract DoppioTest is Test {
 
         vm.prank(governance);
         vault.sweep(address(WMNT), 10 ether);
+    }
+
+    function testFeeGenerationAndCollectionWithBoost1stStrategy() public {
+        setUpWithFee();
+
+        address rewardsRecipient = treasury;
+
+        console.log("\n--- Starting Fee Generation & Collection Test ---");
+        console.log("Performance Fee (BPS): %s", vault.performanceFee());
+        console.log("Management Fee (BPS): %s", vault.managementFee());
+        console.log("Rewards Recipient Address: %s", rewardsRecipient);
+
+
+        uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
+        assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
+
+        // --- SIMULAZIONE ATTIVITÀ UTENTI PER GENERARE PROFITTI E COMMISSIONI ---
+
+        wrapAndApprove(user1, 1000 ether);
+        depositToVault(user1, 500 ether);
+
+        wrapAndApprove(user2, 1000 ether);
+        depositToVault(user2, 700 ether);
+
+        vm.warp(block.timestamp + 30 days);
+        executeHarvest();
+
+        wrapAndApprove(user5, 100 ether);
+        vm.prank(user5);
+        WMNT.transfer(address(strategy1st), 100 ether);
+        console.log("Aggiungiamo 100 ether per boost");
+
+        vm.warp(block.timestamp + 30 days);
+        executeHarvest();
+
+        console.log("\n--- End of Simulation Period ---");
+        _logFullState("Stato finale dopo la simulazione");
+
+        // --- VERIFICA DELLA RACCOLTA DELLE COMMISSIONI ---
+        console.log("\n--- Verifying Fee Collection ---");
+
+        uint256 finalRewardsShares = vault.balanceOf(rewardsRecipient);
+        console.log(
+            "Vault shares collected by rewards address: %u",
+            finalRewardsShares
+        );
+
+
+        assertTrue(
+            finalRewardsShares > initialRewardsShares,
+            "Rewards address should have collected vault shares"
+        );
+
+        // 2. Verifichiamo che le quote raccolte abbiano un valore reale
+
+        console.log(
+            "Rewards recipient is now withdrawing collected fee shares..."
+        );
+
+
+        vm.deal(rewardsRecipient, 1 ether); 
+        vm.startPrank(rewardsRecipient);
+        uint256 withdrawnFeesInWMNT = vault.withdraw(
+            finalRewardsShares,
+            rewardsRecipient,
+            100
+        ); // Max loss 1%
+        vm.stopPrank();
+
+        console.log(
+            "Amount of WMNT collected by redeeming fee shares: %u",
+            withdrawnFeesInWMNT
+        );
+
+
+        assertTrue(
+            withdrawnFeesInWMNT > 0,
+            "Withdrawn fees in WMNT should be greater than 0"
+        );
+
+        console.log(
+            "\n--- Fee Generation & Collection Test Completed Successfully ---"
+        );
+    }
+
+    function testFeeGenerationAndCollectionWithBoost2ndStrategy() public {
+        setUpWithFee();
+
+        address rewardsRecipient = treasury;
+
+        console.log("\n--- Starting Fee Generation & Collection Test ---");
+        console.log("Performance Fee (BPS): %s", vault.performanceFee());
+        console.log("Management Fee (BPS): %s", vault.managementFee());
+        console.log("Rewards Recipient Address: %s", rewardsRecipient);
+
+     
+        uint256 initialRewardsShares = vault.balanceOf(rewardsRecipient);
+        assertEq(initialRewardsShares, 0, "Initial rewards shares should be 0");
+
+        // --- SIMULAZIONE ATTIVITÀ UTENTI PER GENERARE PROFITTI E COMMISSIONI ---
+
+        wrapAndApprove(user1, 1000 ether);
+        depositToVault(user1, 500 ether);
+
+        wrapAndApprove(user2, 1000 ether);
+        depositToVault(user2, 700 ether);
+
+        vm.warp(block.timestamp + 30 days);
+        executeHarvest();
+
+        wrapAndApprove(user5, 100 ether);
+        vm.prank(user5);
+        WMNT.transfer(address(strategy2nd), 100 ether);
+        console.log("Aggiungiamo 100 ether per boost");
+
+        vm.warp(block.timestamp + 30 days);
+        executeHarvest();
+
+        console.log("\n--- End of Simulation Period ---");
+        _logFullState("Stato finale dopo la simulazione");
+
+        // --- VERIFICA DELLA RACCOLTA DELLE COMMISSIONI ---
+        console.log("\n--- Verifying Fee Collection ---");
+
+   
+        uint256 finalRewardsShares = vault.balanceOf(rewardsRecipient);
+        console.log(
+            "Vault shares collected by rewards address: %u",
+            finalRewardsShares
+        );
+
+   
+        assertTrue(
+            finalRewardsShares > initialRewardsShares,
+            "Rewards address should have collected vault shares"
+        );
+
+        // 2. Verifichiamo che le quote raccolte abbiano un valore reale
+        console.log(
+            "Rewards recipient is now withdrawing collected fee shares..."
+        );
+
+        vm.deal(rewardsRecipient, 1 ether); 
+        vm.startPrank(rewardsRecipient);
+        uint256 withdrawnFeesInWMNT = vault.withdraw(
+            finalRewardsShares,
+            rewardsRecipient,
+            100
+        ); // Max loss 1%
+        vm.stopPrank();
+
+        console.log(
+            "Amount of WMNT collected by redeeming fee shares: %u",
+            withdrawnFeesInWMNT
+        );
+
+        assertTrue(
+            withdrawnFeesInWMNT > 0,
+            "Withdrawn fees in WMNT should be greater than 0"
+        );
+
+        console.log(
+            "\n--- Fee Generation & Collection Test Completed Successfully ---"
+        );
+    }
+
+    function testStressTestWithFeesAndBoosts() public {
+        setUpWithFee(); 
+        console.log(
+            "\n--- Starting Long-Term Stress Test with Fees & Random Boosts ---"
+        );
+
+        // --- PREPARAZIONE UTENTI ---
+        wrapAndApprove(user1, 1000 ether);
+        depositToVault(user1, 500 ether);
+        wrapAndApprove(user2, 1000 ether);
+        depositToVault(user2, 700 ether);
+        wrapAndApprove(user3, 1000 ether);
+        depositToVault(user3, 300 ether);
+
+        // Utente per il controllo APY
+        wrapAndApprove(longTermUser, 1000 ether);
+        uint256 longTermDepositAmount = 100 ether;
+        uint256 longTermShares = depositToVault(
+            longTermUser,
+            longTermDepositAmount
+        );
+
+        // Utente "Booster" che donerà fondi
+        vm.deal(boosterUser, 10000 ether); 
+        vm.startPrank(boosterUser);
+        WMNT.deposit{value: 10000 ether}(); 
+        vm.stopPrank();
+
+        executeHarvest(); 
+
+        // --- SIMULAZIONE TEMPORALE (2 ANNI) ---
+        uint256 totalDays = 365 * 2;
+        uint256 daysPassed = 0;
+        uint256 harvestCounter = 0;
+
+        address[] memory activeUsers = new address[](3);
+        activeUsers[0] = user1;
+        activeUsers[1] = user2;
+        activeUsers[2] = user3;
+
+        address[] memory activeStrategies = new address[](2);
+        activeStrategies[0] = address(strategy1st);
+        activeStrategies[1] = address(strategy2nd);
+
+        while (daysPassed < totalDays) {
+            // --- AVANZAMENTO TEMPORALE ---
+            uint256 daysToAdvance = (block.timestamp % 5) + 3; // Avanza da 3 a 7 giorni
+            if (daysPassed + daysToAdvance > totalDays) {
+                daysToAdvance = totalDays - daysPassed;
+            }
+            vm.warp(block.timestamp + daysToAdvance * 1 days);
+            daysPassed += daysToAdvance;
+
+            // --- LOGICA DI HARVEST E BOOST ---
+            uint256 randomValue = uint256(
+                keccak256(abi.encodePacked(block.timestamp, daysPassed))
+            );
+            bool boostedThisCycle = false;
+
+            // 1. Controlla prima se avviene un boost
+            if (randomValue % 100 < 20) {
+                // 20% di probabilità
+                uint256 boostAmount = (randomValue % 96 ether) + 5 ether; // Boost tra 5 e 100 ether
+                address targetStrategy = activeStrategies[
+                    randomValue % activeStrategies.length
+                ];
+
+                console.log("\n!!! BOOSTING EVENT !!!");
+                console.log(
+                    "Boosting strategy %s with %u WMNT",
+                    targetStrategy,
+                    boostAmount
+                );
+
+                vm.startPrank(boosterUser);
+                WMNT.transfer(targetStrategy, boostAmount);
+                vm.stopPrank();
+
+                executeHarvest();
+                console.log("Boost harvest completed.");
+                boostedThisCycle = true;
+            }
+
+            // 2. Esegui l'harvest periodico SOLO SE non c'è stato un boost in questo ciclo
+            if (!boostedThisCycle && (harvestCounter % 2 == 0)) {
+                executeHarvest(); 
+            }
+            harvestCounter++;
+
+            // --- ATTIVITÀ UTENTE CASUALE ---
+            address currentUser = activeUsers[randomValue % activeUsers.length];
+            if (randomValue % 10 < 6) {
+                // 60% prob. di depositare
+                uint256 depositAmount = (randomValue % 50 ether) + 1 ether;
+                wrapAndApprove(currentUser, depositAmount);
+                depositToVault(currentUser, depositAmount);
+            } else {
+                // 40% prob. di prelevare una parte
+                uint256 userShares = vault.balanceOf(currentUser);
+                if (userShares > 1 ether) {
+                    uint256 sharesToWithdraw = (userShares *
+                        (randomValue % 40)) / 100; // Preleva fino al 40%
+                    withdrawFromVault(currentUser, sharesToWithdraw);
+                }
+            }
+        }
+
+        console.log("\n--- Fine della Simulazione di 2 Anni ---");
+        _logFullState("State after the stress test");
+
+        // --- VERIFICA FINALE APY PER L'UTENTE A LUNGO TERMINE ---
+        console.log("\n--- Verifica APY per l'Utente a Lungo Termine ---");
+        uint256 withdrawnAssets = withdrawFromVault(
+            longTermUser,
+            longTermShares
+        );
+        console.log(
+            "Utente a Lungo Termine (Deposito Iniziale: %u WMNT, Prelievo Finale: %u WMNT).",
+            longTermDepositAmount,
+            withdrawnAssets
+        );
+
+        uint256 profit = 0;
+        if (withdrawnAssets > longTermDepositAmount) {
+            profit = withdrawnAssets - longTermDepositAmount;
+        }
+        console.log("Profitto Utente a Lungo Termine: %u", profit);
+
+        assertGe(
+            profit,
+            0,
+            "L'utente a lungo termine non dovrebbe aver perso capitale."
+        );
+
+        assertTrue(
+            vault.balanceOf(treasury) > 0,
+            "Il treasury dovrebbe aver raccolto commissioni."
+        );
+
+        console.log("\n--- Stress Test Completato con Successo ---");
     }
 }

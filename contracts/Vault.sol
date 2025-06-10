@@ -1316,6 +1316,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
      * @notice Revokes a strategy, callable by governance, guardian, or the strategy itself.
      */
     function revokeStrategy(address _strategy) external {
+        console.log("Sono qui dentro il revokeStrategy");
         require(
             msg.sender == _strategy ||
                 msg.sender == governance ||

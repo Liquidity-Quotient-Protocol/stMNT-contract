@@ -4,7 +4,7 @@ pragma solidity ^0.8.12;
 pragma experimental ABIEncoderV2;
 
 // console import is for debugging and should be removed for production.
-// import {console} from "forge-std/Test.sol";
+ import {console} from "forge-std/Test.sol";
 
 // These are the core Yearn libraries
 import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
@@ -256,27 +256,23 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     function liquidatePosition(
         uint256 _amountNeeded
     ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
-        uint256 balance = want.balanceOf(address(this));
-        if (balance >= _amountNeeded) {
-            return (_amountNeeded, 0);
-        }
 
-        uint256 amountToWithdraw = _amountNeeded - balance;
+
         (uint256 amountFreed, uint256 lossFromWithdraw) = _withdrawSingleAmount(
-            amountToWithdraw
+            _amountNeeded
         ); // Use both return values
         _loss = lossFromWithdraw; // Assign loss from withdrawal
 
-        _liquidatedAmount = balance + amountFreed;
+        _liquidatedAmount =amountFreed;
 
         // If still not enough, and no loss was reported by _withdrawSingleAmount for this shortfall.
         // This implies _withdrawSingleAmount returned less than amountToWithdraw without reporting a full loss for it.
         if (
             _liquidatedAmount < _amountNeeded &&
             _loss == 0 &&
-            amountFreed < amountToWithdraw
+            amountFreed < _amountNeeded
         ) {
-            _loss += (amountToWithdraw - amountFreed);
+            _loss += (_amountNeeded - amountFreed);
         }
     }
 
@@ -364,6 +360,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         uint256 prevDebt = vault.strategies(address(this)).totalDebt;
         uint256 currentAssets = estimatedTotalAssets();
 
+        console.log("currentAssets -> ",currentAssets);
+        console.log("prevDebt -> ",prevDebt);
+        
+
         if (currentAssets > prevDebt) {
             profit_ = currentAssets - prevDebt;
             loss_ = 0;
@@ -371,7 +371,8 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
             loss_ = prevDebt - currentAssets;
             profit_ = 0;
         }
-        debtPayment_ = want.balanceOf(address(this));
+        debtPayment_ = 0;
+        //debtPayment_ = want.balanceOf(address(this));
     }
 
     /**
