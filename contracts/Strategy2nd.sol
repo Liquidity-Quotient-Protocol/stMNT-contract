@@ -25,10 +25,10 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     using Address for address;
 
     /// @notice Address of Wrapped Mantle token (the want token for this strategy)
-    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
+    address public constant WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
     
     /// @notice Address of the Lendle protocol data provider for getting reserve information
-    address public immutable lendlDataProvider = 0x552b9e4bae485C4B7F540777d7D25614CdB84773;
+    address public constant lendlDataProvider = 0x552b9e4bae485C4B7F540777d7D25614CdB84773;
 
     /// @notice Address of the Lendle lending pool where funds are deposited
     address public constant lendingPool = 0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3;
@@ -221,7 +221,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
   
 
-        uint256 amountFreed = _withdrawTokenFromStrategy(_amountNeeded);
+        (uint256 amountFreed ,)= _withdrawSingleAmount(_amountNeeded);
 
         _liquidatedAmount = amountFreed;
      if (
@@ -280,16 +280,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         return _amtInWei;
     }
 
-    /**
-     * @notice Internal function to withdraw funds from the Lendle lending strategy
-     * @param _amount Amount of want token to withdraw
-     * @return returnAmount Actual amount received from the withdrawal
-     */
-    function _withdrawTokenFromStrategy(
-        uint256 _amount
-    ) internal returns (uint256 returnAmount) {
-        (returnAmount, ) = _withdrawSingleAmount(_amount);
-    }
+  
 
     /**
      * @notice Calculates the current value of strategy positions and determines profit/loss
@@ -300,6 +291,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      */
     function _returnDepositPlatformValue()
         internal
+        view
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
         uint256 prevDebt = vault.strategies(address(this)).totalDebt;
@@ -359,10 +351,6 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         if (_amountWantToWithdraw == 0) {
             return (0, 0);
         }
-
-        uint256 lTokensHeldBeforeWithdraw = IERC20(lTokenWMNT).balanceOf(
-            address(this)
-        );
 
         uint256 totalBal = getBalanceWant();
 

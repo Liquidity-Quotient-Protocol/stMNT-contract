@@ -110,8 +110,7 @@ contract Strg2MultiUserTest is Test {
         console.log("--- Logging Lendle Value: [%s] ---", occasion);
         uint256 actualLTokens = IERC20(strategy2nd.lTokenWMNT()).balanceOf(address(strategy2nd));
         if (actualLTokens > 0) {
-            uint256 valueInWant = strategy2nd.lTokenToWant(actualLTokens);
-            console.log("Lendle - Strategy holds %s lTokens, valued at: %s WMNT (via lTokenToWant)", actualLTokens, valueInWant);
+            console.log("Lendle - Strategy holds %s lTokens, valued at: %s WMNT ", actualLTokens);
         } else {
             console.log("Lendle - Strategy holds 0 lTokens.");
         }

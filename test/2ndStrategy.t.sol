@@ -92,10 +92,7 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
         
         uint256 actualLTokens = IERC20(strategy2nd.lTokenWMNT()).balanceOf(address(strategy2nd));
         console.log("Strategy2nd - Actual lTokenWMNT Balance (on-chain): %s", actualLTokens);
-        if (actualLTokens > 0) {
-            uint256 valueInLendle = strategy2nd.lTokenToWant(actualLTokens);
-            console.log("Strategy2nd - Value of lTokens in Lendle (lTokenToWant): %s", valueInLendle);
-        }
+      
         console.log("Strategy2nd - Estimated Total Assets (strategy func): %s", strategy2nd.estimatedTotalAssets());
         console.log("------------------------------------");
     }

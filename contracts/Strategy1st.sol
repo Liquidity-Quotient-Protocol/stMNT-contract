@@ -36,10 +36,10 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
     using Address for address;
 
     /// @notice Immutable address of the Init protocol's core/router contract.
-    address public immutable _initAddr =
+    address public constant _initAddr =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
     /// @notice Immutable address of the WMNT (Wrapped MNT) token, the 'want' token for this strategy.
-    address public immutable WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
+    address public constant WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
 
     /// @notice Address of the Init Protocol Lending Pool where funds are deposited.
     /// @dev Must be set by the owner via `setLendingPool()`.
@@ -247,7 +247,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
 
     /**
      * @notice Makes `_amountNeeded` of 'want' tokens liquid, withdrawing from `lendingPool` if necessary.
-     * @dev Checks current liquid 'want'. If insufficient, calls `_withdrawTokenFromStrategy`.
+     * @dev Checks current liquid 'want'. If insufficient, calls `_withdrawSingleAmount`.
      * @param _amountNeeded Target amount of liquid 'want'.
      * @return _liquidatedAmount Actual 'want' amount liquid after operations.
      * @return _loss Loss incurred during withdrawal from the `lendingPool`.
@@ -332,17 +332,7 @@ contract Strategy1st is BaseStrategy, Iinit, Ownable {
         return _amtInWei;
     }
 
-    /**
-     * @notice Internal: Withdraws 'want' tokens from the underlying protocol positions.
-     * @dev Wrapper for `_withdrawSingleAmount`.
-     * @param _amount The amount of 'want' to withdraw from positions.
-     * @return returnAmount_ The actual amount of 'want' received.
-     */
-    function _withdrawTokenFromStrategy(
-        uint256 _amount
-    ) internal returns (uint256 returnAmount_) {
-        (returnAmount_, ) = _withdrawSingleAmount(_amount);
-    }
+
 
     /**
      * @notice Internal: Calculates profit/loss based on current assets vs. debt to Vault.
