@@ -6,7 +6,7 @@ import {Strategy1st} from "../contracts/Strategy1st.sol";
 
 import {ERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/ERC20.sol";
 
-contract Deploy is Script {
+contract Deploy1stStrategyTest is Script {
     address public owner = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;
     address public vault = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;
 
