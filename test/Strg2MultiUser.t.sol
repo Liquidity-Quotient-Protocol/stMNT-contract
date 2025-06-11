@@ -117,7 +117,7 @@ contract Strg2MultiUserTest is Test {
     }
 
 
-    function testMultiUser_MixedOperations_LendleInterest() public { // Nome test specifico per Strategy2nd
+    function testMultiUser_MixedOperations_LendleInterest() public { 
         console.log("--- Starting Multi-User Test for Strategy2nd (Lendle) ---");
 
         uint256 depositA1 = 1000 ether;

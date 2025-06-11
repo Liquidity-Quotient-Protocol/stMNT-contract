@@ -15,7 +15,7 @@ interface IWETH {
     function balanceOf(address) external view returns (uint256);
 }
 
-contract Strg2WithInterestLogging is Test { // Nome contratto test modificato per chiarezza
+contract Strg2WithInterestLogging is Test { 
     StMNT public vault;
     Strategy2nd public strategy2nd;
 
@@ -24,17 +24,13 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
     address public treasury = address(3);
     address public guardian = address(4);
     address public user1 = address(5);
-    // Indirizzi per altri utenti se necessari in test futuri
-    // address public user2 = address(6);
-    // address public user3 = address(7);
+
 
 
     IWETH public constant WMNT =
         IWETH(address(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8));
 
     // LENDING_POOL_ADDRESS per Strategy2nd (Lendle)
-    // Nota: L'indirizzo 0x4494... era per InitPool. Assicurati di usare quello corretto per Lendle.
-    // Dal codice di Strategy2nd, sembra essere 0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3
     address internal constant LENDLE_LENDING_POOL = 0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3;
 
 
@@ -43,20 +39,16 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
             address(WMNT),
             governance,
             treasury,
-            "stMNT_Test", // Nome vault leggermente variato
+            "stMNT_Test", 
             "stMNT_Test",
             guardian,
             management
         );
         vm.startPrank(governance);
-        strategy2nd = new Strategy2nd(address(vault), governance); // Usa Strategy2nd
-        // L'indirizzo lendingPool in Strategy2nd è hardcoded a 0xCFa5aE7c...
-        // lTokenWMNT è recuperato nel costruttore di Strategy2nd
+        strategy2nd = new Strategy2nd(address(vault), governance); 
+   
 
-        strategy2nd.updateUnlimitedSpending(true); // Strategia approva Vault per 'want'
-        // L'approve per lendingPool è fatto nel costruttore di Strategy2nd
-        // strategy2nd.updateUnlimitedSpendingLendl(true); // Questo potrebbe essere ridondante
-
+        strategy2nd.updateUnlimitedSpending(true); 
         vault.addStrategy(
             address(strategy2nd),
             10_000, // 100% debtRatio
@@ -69,7 +61,7 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
         vault.setDepositLimit(type(uint256).max);
         vm.stopPrank();
 
-        // Fornisci fondi all'utente
+
         vm.deal(user1, 5000 ether);
     }
 
@@ -128,9 +120,6 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
         console.log("--- Phase 3: First 60-Day Interest Period ---");
         uint256 pps_before_interest_period1 = vault.pricePerShare();
         skip(60 days);
-        // Per Aave/Lendle, `accrueInterest` non è chiamata esternamente,
-        // ma `getReserveNormalizedIncome` (usata da `lTokenToWant`) dovrebbe dare il rate aggiornato.
-        // Una chiamata a `harvest` farà sì che la strategia legga questo rate.
         logSystemState("After 60 days skip, Before 2nd Harvest");
 
         // --- FASE 4: SECONDO HARVEST (Report Primo Profitto) ---
@@ -142,8 +131,6 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
         
         uint256 pps_after_profit_report1 = vault.pricePerShare();
         console.log("PPS immediately after 2nd harvest (profit locked): %s", pps_after_profit_report1);
-        // Ci aspettiamo che il PPS non sia ancora aumentato molto qui, perché il profitto è bloccato.
-        // Potrebbe esserci un micro-cambiamento dovuto al +/- 1 wei.
         assertApproxEqAbs(pps_after_profit_report1, pps_before_interest_period1, 2, "PPS should not change much before profit unlock");
 
 
@@ -198,14 +185,12 @@ contract Strg2WithInterestLogging is Test { // Nome contratto test modificato pe
         return assetsWithdrawn; // Modificato per restituire l'importo corretto
     }
 
-    // Mantieni gli altri test come testInitialize, testDepositAndWithdraw_NoStrategy, ecc.
-    // Modifica testFullFlow_InterestAccrualAndWithdrawal per chiamare il nuovo test dettagliato
+    
     function testFullFlow_InterestAccrualAndWithdrawal() public {
         //testInitialize();
-        // testDepositAndWithdraw_NoStrategy(); // Puoi decommentare se vuoi eseguirlo sempre
-        // testDepositAndWithdraw_WithStrategy_NoInterest(); // Puoi decommentare
+        // testDepositAndWithdraw_NoStrategy(); 
+        // testDepositAndWithdraw_WithStrategy_NoInterest(); 
 
         uint256 assets = testDepositAndWithdraw_WithStrategy_WithInterest_DetailedLogs();
-        // Qui potresti aggiungere un'asserzione per confrontare 'assets' con un valore atteso se lo hai.
     }
 }

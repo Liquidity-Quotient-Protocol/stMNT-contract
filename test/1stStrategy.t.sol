@@ -4,8 +4,6 @@ pragma solidity 0.8.19;
 import {Test, console} from "forge-std/Test.sol";
 import {StMNT} from "../contracts/Vault.sol";
 import {Strategy1st} from "../contracts/Strategy1st.sol";
-// Rimuovi ILendingPool da qui se già importato sotto
-// import {ILendingPool} from "../contracts/interface/IInitCore.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IInitCore, ILendingPool} from "../contracts/interface/IInitCore.sol"; // Assicurati che questo percorso sia corretto
@@ -176,19 +174,11 @@ contract Strg1 is Test {
             "PPS after 1st harvest (NoInterestTest): ",
             ppsAfterHarvest
         );
-        // Dopo il primo harvest, il PPS potrebbe rimanere 1 ether o variare leggermente
-        // a seconda di come il vault gestisce il primo deposito in una strategia.
-        // Per semplicità, non facciamo un assertEq stretto qui, ma lo osserviamo.
-
-        // Verifica che le quote siano circa equivalenti al deposito se PPS è ~1e18
+   
         assertApproxEqAbs(shares, depositAmount, 1, "Shares calculation issue");
 
         vm.startPrank(user1);
-        // L'utente non ha bisogno di approvare il vault per prelevare le proprie quote.
-        // vault.approve(address(vault), shares);
         uint256 assets = vault.withdraw(shares, user1, 100); // maxLoss 0.01% = 10 BPS
-        // Ci aspettiamo di riavere circa l'importo depositato, con una piccola tolleranza per eventuali
-        // micro-fees o imperfezioni nel calcolo del PPS al primo deposito.
         assertApproxEqRel(
             assets,
             depositAmount,

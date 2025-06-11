@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import {console} from "forge-std/Test.sol";
-
 /// @title Vault Interface Definitions and Storage for Forked Yearn V2 Vault
 /// @notice Defines constants, interfaces, and storage layout for the Vault contract.
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
@@ -1317,7 +1315,6 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
      * @notice Revokes a strategy, callable by governance, guardian, or the strategy itself.
      */
     function revokeStrategy(address _strategy) external {
-        console.log("Sono qui dentro il revokeStrategy");
         require(
             msg.sender == _strategy ||
                 msg.sender == governance ||
@@ -1569,18 +1566,7 @@ contract StMNT is IERC20, ReentrancyGuard, EIP712("StakingContract", "0.4.6") {
     ) external nonReentrant returns (uint256) {
         StrategyParams storage params = strategies[msg.sender];
         require(params.activation > 0, "Vault: !approved strategy");
-        //! Problema di arrotondamento
-        if (_debtPayment == 1) {
-            --_debtPayment;
-        }
         // Sanity check balance
-        //! Commenti per test
-        if (token.balanceOf(msg.sender) < _gain + _debtPayment) {
-            console.log("Vault: Insufficient balance in strategy");
-            console.log("Required gain: ", _gain);
-            console.log("Required debt payment: ", _debtPayment);
-            console.log("Strategy balance: ", token.balanceOf(msg.sender));
-        }
         require(
             token.balanceOf(msg.sender) >= _gain + _debtPayment,
             "Vault: insufficient balance"

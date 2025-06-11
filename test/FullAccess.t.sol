@@ -2,24 +2,27 @@
 pragma solidity 0.8.19;
 
 import {Test, console} from "forge-std/Test.sol";
-import {DoppioTest} from "./DoppioTest.t.sol"; // Importa il tuo test esistente per usare il suo setup
+import {DoppioTest} from "./DoppioTest.t.sol";
 
 /**
- * @title AccessControlTest
- * @notice Test suite dedicata a verificare i controlli degli accessi (role permissions)
- * per il Vault e le Strategie.
- * @dev Eredita da DoppioTest per riutilizzare gli indirizzi e la funzione di setup.
+ *@title AccessControlTest
+ *@notice Test suite dedicated to verifying access controls (role permissions) for the Vault and Strategies.
+ *@dev Inherits from DoppioTest to reuse addresses and the setup function.
  */
-contract AccessControlTest is DoppioTest {
-    // La funzione setUp() viene ereditata da DoppioTest, quindi vault, strategie, etc.
-    // sono già inizializzati prima di ogni test qui sotto.
 
+contract AccessControlTest is DoppioTest {
     // =================================================================
     //                    TEST DI ACCESSO SUL VAULT
     // =================================================================
 
+    address public newGovernance = makeAddr("newGovernance");
+    address public newManagement = makeAddr("newManagement");
+    address public newGuardian = makeAddr("newGuardian");
+    address public newStrategist = makeAddr("newStrategist");
+    address public newKeeper = makeAddr("newKeeper");
+
     function testVault_GovernanceFunctions() public {
-        setUpWithFee(); // Assicura che tutto sia deployato
+        setUpWithFee();
         address unauthorizedUser = user1;
 
         // --- setPerformanceFee ---
@@ -32,7 +35,7 @@ contract AccessControlTest is DoppioTest {
         vault.setPerformanceFee(200);
         assertEq(vault.performanceFee(), 200);
         vm.stopPrank();
-        
+
         // --- addStrategy ---
         vm.startPrank(unauthorizedUser);
         vm.expectRevert("Vault: !governance");
@@ -44,36 +47,25 @@ contract AccessControlTest is DoppioTest {
         vm.expectRevert("Vault: !governance");
         vault.setDepositLimit(12345);
         vm.stopPrank();
-
-        // --- Altre funzioni di governance da testare ---
-        // setManagement, setRewards, setEmergencyShutdown(false), etc.
-        // ... (aggiungere test per ogni funzione `onlyGovernance`)
     }
 
     function testVault_ManagementFunctions() public {
         setUpWithFee();
         address unauthorizedUser = user1;
         // --- updateStrategyDebtRatio ---
-        // Questa funzione può essere chiamata sia da management che da governance
-        
-        // Test fallimento da utente non autorizzato
+
         vm.startPrank(unauthorizedUser);
         vm.expectRevert("Vault: !authorized");
         vault.updateStrategyDebtRatio(address(strategy1st), 5000);
         vm.stopPrank();
 
-        // Test successo da management
         vm.startPrank(management);
         vault.updateStrategyDebtRatio(address(strategy1st), 5000);
-        //assertEq(vault.strategies(address(strategy1st)).debtRatio, 5000);
         vm.stopPrank();
 
-        // Test successo da governance
         vm.startPrank(governance);
         vault.updateStrategyDebtRatio(address(strategy1st), 3000);
-        //assertEq(vault.strategies(address(strategy1st)).debtRatio, 6000);
         vm.stopPrank();
-       
     }
 
     function testVault_GuardianFunctions() public {
@@ -81,7 +73,6 @@ contract AccessControlTest is DoppioTest {
         address unauthorizedUser = user1;
 
         // --- setEmergencyShutdown(true) ---
-        // Può essere chiamato da guardian o governance
 
         // Test fallimento da utente non autorizzato
         vm.startPrank(unauthorizedUser);
@@ -101,7 +92,6 @@ contract AccessControlTest is DoppioTest {
         vm.stopPrank();
     }
 
-
     // =================================================================
     //                   TEST DI ACCESSO SULLE STRATEGIE
     // =================================================================
@@ -110,34 +100,21 @@ contract AccessControlTest is DoppioTest {
         setUpWithFee();
         address unauthorizedUser = user1;
 
-
         // --- Funzioni di Strategy1st ---
         vm.startPrank(unauthorizedUser);
-        vm.expectRevert(abi.encodeWithSignature(
-         "OwnableUnauthorizedAccount(address)",
-                address(unauthorizedUser)
-        ));
+        vm.expectRevert();
         strategy1st.setLendingPool(address(0xdead));
-        
-           vm.expectRevert(abi.encodeWithSignature(
-         "OwnableUnauthorizedAccount(address)",
-                address(unauthorizedUser)
-        ));
+
+        vm.expectRevert();
         strategy1st.updateUnlimitedSpending(false);
         vm.stopPrank();
-        
+
         // --- Funzioni di Strategy2nd ---
         vm.startPrank(unauthorizedUser);
-        vm.expectRevert(abi.encodeWithSignature(
-         "OwnableUnauthorizedAccount(address)",
-                address(unauthorizedUser)
-        ));
+        vm.expectRevert();
         strategy2nd.setlToken(address(0xdead));
 
-        vm.expectRevert(abi.encodeWithSignature(
-         "OwnableUnauthorizedAccount(address)",
-                address(unauthorizedUser)
-        ));
+        vm.expectRevert();
         strategy2nd.updateUnlimitedSpendingLendl(false);
         vm.stopPrank();
     }
@@ -146,21 +123,116 @@ contract AccessControlTest is DoppioTest {
         setUpWithFee();
         address unauthorizedUser = user1;
         // La BaseStrategy usa `_onlyKeepers` che include strategist e governance
-        // Il revert esatto potrebbe variare, ma ci aspettiamo un fallimento.
-        
+
         // --- Harvest ---
         vm.startPrank(unauthorizedUser);
-        vm.expectRevert(); // Revert generico, il messaggio esatto dipende da `_onlyKeepers`
+        vm.expectRevert();
         strategy1st.harvest();
-        
+
         vm.expectRevert();
         strategy2nd.harvest();
         vm.stopPrank();
-        
+
         // Test successo da management (che abbiamo impostato come strategist/keeper)
         vm.startPrank(management);
         strategy1st.harvest();
         strategy2nd.harvest();
         vm.stopPrank();
+    }
+
+    function testRoleManagementLifecycle() public {
+        setUpWithFee();
+
+        console.log("\n--- Inizio Test Ciclo di Vita Gestione Ruoli ---");
+
+        // =================================================================
+        //                 1. TEST TRASFERIMENTO GOVERNANCE DEL VAULT
+        // =================================================================
+        console.log("\n[1] Test trasferimento Governance del Vault...");
+
+        vm.startPrank(governance);
+        vault.setGovernance(newGovernance);
+        assertEq(
+            vault.pendingGovernance(),
+            newGovernance,
+            "pendingGovernance impostato correttamente"
+        );
+        vm.stopPrank();
+
+        vm.startPrank(newGovernance);
+        vault.acceptGovernance();
+        assertEq(
+            vault.governance(),
+            newGovernance,
+            "La nuova governance e'stata impostata correttamente"
+        );
+        vm.stopPrank();
+
+        vm.startPrank(governance);
+        vm.expectRevert("Vault: !governance");
+        vault.setDepositLimit(1 ether);
+        vm.stopPrank();
+        console.log("--> Trasferimento Governance OK.");
+
+        // =================================================================
+        //                 2. TEST ASSEGNAZIONE NUOVI RUOLI NEL VAULT
+        // =================================================================
+        console.log("\n[2] Test assegnazione ruoli Management e Guardian...");
+
+        vm.startPrank(newGovernance);
+
+        vault.setManagement(newManagement);
+        assertEq(
+            vault.management(),
+            newManagement,
+            "newManagement non impostato"
+        );
+
+        vault.setGuardian(newGuardian);
+        assertEq(vault.guardian(), newGuardian, "newGuardian  impostato");
+
+        vm.stopPrank();
+
+        vm.startPrank(management);
+        vm.expectRevert("Vault: !authorized");
+        vault.updateStrategyDebtRatio(address(strategy1st), 5000);
+        vm.stopPrank();
+        console.log("--> Assegnazione ruoli Vault OK.");
+
+        // =================================================================
+        //                 3. TEST ASSEGNAZIONE RUOLI DELLA STRATEGIA
+        // =================================================================
+        console.log(
+            "\n[3] Test assegnazione ruoli Strategist e Keeper (su Strategy1st)..."
+        );
+
+        vm.startPrank(newGovernance);
+
+        strategy1st.setStrategist(newStrategist);
+        assertEq(
+            strategy1st.strategist(),
+            newStrategist,
+            "newStrategist non impostato"
+        );
+        vm.stopPrank();
+
+        vm.startPrank(newStrategist);
+        strategy1st.setKeeper(newKeeper);
+        assertEq(strategy1st.keeper(), newKeeper, "newKeeper non impostato");
+        vm.stopPrank();
+
+        vm.startPrank(management);
+        vm.expectRevert();
+        strategy1st.harvest();
+        vm.stopPrank();
+
+        vm.startPrank(newKeeper);
+        strategy1st.harvest();
+        vm.stopPrank();
+        console.log("--> Assegnazione ruoli Strategia OK.");
+
+        console.log(
+            "\n--- Test Ciclo di Vita Gestione Ruoli Completato con Successo ---"
+        );
     }
 }

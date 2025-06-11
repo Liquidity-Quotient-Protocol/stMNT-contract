@@ -9,35 +9,39 @@ import {IERC20 as IERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/
 import {SafeERC20 as SafeERC20v4} from "@openzeppelin-contracts@4.5.0/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Lendl} from "./DefiProtocol/LendlProt.sol";
 import {IProtocolDataProvider, ILendingPool} from "./interface/ILendl.sol";
-import {Ownable} from "@openzeppelin-contract@5.3.0/contracts/access/Ownable.sol";
 
 /**
  * @title Strategy2nd
- * @author Your Team
+ * @author LiQ Quotient Protocol Team
  * @notice A Yearn V2 strategy that deposits WMNT tokens into the Lendle lending protocol to earn yield
- * @dev This strategy inherits from BaseStrategy (Yearn V2), Ownable, and Lendl (Lendle protocol interaction)
+ * @dev This strategy inherits from BaseStrategy (Yearn V2) and Lendl (Lendle protocol interaction)
  *      The strategy accepts WMNT as the want token and deposits it into Lendle lending pools to generate yield
  *      Uses Lendle's Aave-like architecture with lTokens representing deposited positions
+ *      Automatically fetches the correct lWMNT token address during construction
  */
-contract Strategy2nd is BaseStrategy, Ownable, Lendl {
+contract Strategy2nd is BaseStrategy, Lendl {
     using SafeERC20 for IERC20;
     using SafeERC20v4 for IERC20v4;
     using Address for address;
 
     /// @notice Address of Wrapped Mantle token (the want token for this strategy)
     address public constant WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
-    
+
     /// @notice Address of the Lendle protocol data provider for getting reserve information
-    address public constant lendlDataProvider = 0x552b9e4bae485C4B7F540777d7D25614CdB84773;
+    address public constant lendlDataProvider =
+        0x552b9e4bae485C4B7F540777d7D25614CdB84773;
 
     /// @notice Address of the Lendle lending pool where funds are deposited
-    address public constant lendingPool = 0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3;
-    
-    /// @notice Address of the lToken contract (can be set by owner)
+    address public constant lendingPool =
+        0xCFa5aE7c2CE8Fadc6426C1ff872cA45378Fb7cF3;
+
+    /// @notice Address of a configurable lToken contract (can be set by authorized users)
+    /// @dev This is separate from lTokenWMNT and can be used for additional functionality
     address public lToken;
 
     /// @notice Address of the lWMNT token received when depositing WMNT into Lendle
     /// @dev This is the receipt token representing our position in the Lendle pool
+    ///      Automatically fetched from Lendle's data provider during construction
     address public immutable lTokenWMNT;
 
     /**
@@ -45,12 +49,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
      * @dev Automatically fetches the lWMNT token address from Lendle's data provider
      *      and sets up unlimited approval for the lending pool
      * @param _vault Address of the Yearn vault that will use this strategy
-     * @param _owner Address that will own this strategy contract
+     * @param _owner Address that will own this strategy contract (unused in current implementation)
      */
-    constructor(
-        address _vault,
-        address _owner
-    ) BaseStrategy(_vault) Ownable(_owner) {
+    constructor(address _vault, address _owner) BaseStrategy(_vault) {
         (address aTokenAddress, , ) = IProtocolDataProvider(lendlDataProvider)
             .getReserveTokensAddresses(WMNT);
         lTokenWMNT = aTokenAddress;
@@ -58,18 +59,16 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         IERC20(WMNT).approve(lendingPool, type(uint256).max);
     }
 
-    /// @notice Event emitted when the lToken address is updated
-    event SetNewLToken(
-        address indexed oldLToken,
-        address indexed newLToken
-    );
+    /// @notice Event emitted when the lToken address is updated by authorized users
+    event SetNewLToken(address indexed oldLToken, address indexed newLToken);
 
     /**
-     * @notice Sets the address of the LToken contract
-     * @dev Only callable by the strategy owner, emits SetNewLToken event
-     * @param _lToken The address of the LToken contract
+     * @notice Sets the address of the configurable lToken contract
+     * @dev Only callable by authorized users (governance, management, or strategist)
+     *      Emits SetNewLToken event for tracking changes
+     * @param _lToken The address of the lToken contract to set
      */
-    function setlToken(address _lToken) external onlyOwner {
+    function setlToken(address _lToken) external onlyAuthorized {
         require(_lToken != address(0), "Set correct Address");
         address oldLToken = lToken;
         lToken = _lToken;
@@ -77,11 +76,12 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Updates unlimited spending allowance for the vault on the want token
-     * @dev This allows the vault to pull funds from the strategy during withdrawals
-     * @param _approve If true, grants max allowance; otherwise revokes
+     * @notice Updates the want token allowance for the vault contract
+     * @dev Allows the vault to pull want tokens from this strategy during withdrawals
+     *      Only callable by authorized users
+     * @param _approve If true, grants maximum allowance; otherwise revokes allowance
      */
-    function updateUnlimitedSpending(bool _approve) external onlyOwner {
+    function updateUnlimitedSpending(bool _approve) external onlyAuthorized {
         if (_approve) {
             SafeERC20v4.safeApprove(IERC20v4(want), address(vault), 0);
             SafeERC20v4.safeApprove(
@@ -95,11 +95,14 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Updates unlimited spending allowance for Lendle on the want token
-     * @dev This allows the strategy to deposit funds into the Lendle protocol
-     * @param _approve If true, grants max allowance; otherwise revokes
+     * @notice Updates the want token allowance for the Lendle lending pool
+     * @dev Allows the strategy to deposit funds into the Lendle protocol
+     *      Only callable by authorized users
+     * @param _approve If true, grants maximum allowance; otherwise revokes allowance
      */
-    function updateUnlimitedSpendingLendl(bool _approve) external onlyOwner {
+    function updateUnlimitedSpendingLendl(
+        bool _approve
+    ) external onlyAuthorized {
         if (_approve) {
             SafeERC20v4.safeApprove(IERC20v4(want), lendingPool, 0);
             SafeERC20v4.safeApprove(
@@ -113,8 +116,8 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Returns the strategy name for identification
-     * @return The human-readable name of this strategy
+     * @notice Returns the display name of this strategy
+     * @return The human-readable name of the strategy
      */
     function name() external view override returns (string memory) {
         return "Strategy StMantle defi staking Lendle deposit";
@@ -123,6 +126,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     /**
      * @notice Converts lToken amount to equivalent want token amount
      * @dev Uses Lendle's normalized income rate to calculate the conversion
+     *      Rate is expressed in ray units (1e27) following Aave's standard
      * @param lTokenAmount Amount of lTokens to convert
      * @return Equivalent amount in want token terms
      */
@@ -137,7 +141,8 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
     /**
      * @notice Estimates the total assets held by the strategy in terms of want token
-     * @dev Calculates the sum of liquid want tokens and lWMNT tokens held
+     * @dev Calculates the sum of liquid want tokens and lWMNT tokens held by the strategy
+     *      Note: lWMNT tokens naturally appreciate in value over time due to accrued interest
      * @return The estimated total value of managed assets in want token terms
      */
     function estimatedTotalAssets() public view override returns (uint256) {
@@ -150,12 +155,14 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Prepares performance report data for the vault
-     * @dev Called by the vault during harvest to assess strategy performance
-     * @param _debtOutstanding Amount needed to be made available to the vault
-     * @return _profit Reported profit generated by the strategy
-     * @return _loss Reported loss incurred by the strategy
-     * @return _debtPayment Amount available for immediate repayment to vault
+     * @notice Prepares performance report data for the vault during harvest
+     * @dev Calculates profit/loss and ensures adequate liquidity for debt obligations
+     *      May liquidate positions to meet debt outstanding or profit reporting requirements
+     *      Applies a 1 wei reduction to profit for precision issue mitigation
+     * @param _debtOutstanding Amount the vault expects the strategy to repay or amount over debt limit
+     * @return _profit The calculated profit to report to the vault
+     * @return _loss The calculated loss to report to the vault
+     * @return _debtPayment The amount of want tokens available for debt repayment
      */
     function prepareReturn(
         uint256 _debtOutstanding
@@ -164,23 +171,25 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         override
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
-        (uint256 currentProfit, uint256 currentLoss, ) = _returnDepositPlatformValue();
+        (
+            uint256 currentProfit,
+            uint256 currentLoss,
+
+        ) = _returnDepositPlatformValue();
         _profit = currentProfit;
         _loss = currentLoss;
-
 
         if (_debtOutstanding > 0) {
             _debtPayment = _debtOutstanding;
             uint256 neededLiquid = _debtPayment + _profit;
             uint256 currentLiquid = want.balanceOf(address(this));
 
-
-           if (currentLiquid < neededLiquid) {
+            if (currentLiquid < neededLiquid) {
                 uint256 amountToLiquidate = neededLiquid - currentLiquid;
                 (, uint256 lossOnLiq) = liquidatePosition(amountToLiquidate);
-                _loss += lossOnLiq; 
+                _loss += lossOnLiq;
             }
-        }else{
+        } else {
             _debtPayment = 0;
             uint256 currentLiquid = want.balanceOf(address(this));
             if (currentLiquid < _profit) {
@@ -189,15 +198,19 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
                 _loss += lossOnLiq;
             }
         }
+
+        if (_debtPayment == 1) {
+            _debtPayment = 0;
+        }
         if (_profit > 0) {
             _profit = _profit - 1;
         }
     }
 
     /**
-     * @notice Adjusts the strategy's position by depositing available funds into Lendle
-     * @dev Invests excess want tokens while maintaining required liquidity for debt outstanding
-     * @param _debtOutstanding Amount that may be withdrawn in the next harvest
+     * @notice Adjusts the strategy's investment position after reporting to the vault
+     * @dev Invests excess liquid want tokens into the Lendle pool while maintaining required liquidity
+     * @param _debtOutstanding Amount that may be withdrawn in the next harvest or amount over debt limit
      */
     function adjustPosition(uint256 _debtOutstanding) internal override {
         uint256 _balanceInContract = want.balanceOf(address(this));
@@ -210,21 +223,20 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Attempts to free up enough capital to satisfy a withdrawal request
-     * @dev First uses available liquid funds, then withdraws from Lendle if needed
-     * @param _amountNeeded Amount to be withdrawn from the strategy
-     * @return _liquidatedAmount Actual amount withdrawn and made available
-     * @return _loss Any loss incurred during the withdrawal process
+     * @notice Makes a specified amount of want tokens liquid by withdrawing from Lendle if necessary
+     * @dev Attempts to withdraw the exact amount needed from the lending pool
+     *      Calculates loss if the actual amount received is less than requested
+     * @param _amountNeeded Target amount of liquid want tokens required
+     * @return _liquidatedAmount Actual amount of want tokens made liquid after operations
+     * @return _loss Loss incurred if withdrawal returns less than expected
      */
     function liquidatePosition(
         uint256 _amountNeeded
     ) internal override returns (uint256 _liquidatedAmount, uint256 _loss) {
-  
-
-        (uint256 amountFreed ,)= _withdrawSingleAmount(_amountNeeded);
+        (uint256 amountFreed, ) = _withdrawSingleAmount(_amountNeeded);
 
         _liquidatedAmount = amountFreed;
-     if (
+        if (
             _liquidatedAmount < _amountNeeded &&
             _loss == 0 &&
             amountFreed < _amountNeeded
@@ -234,9 +246,9 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Exits all positions and retrieves all funds to the strategy
-     * @dev Used during strategy migration or emergency situations
-     * @return The total amount recovered to the strategy contract
+     * @notice Liquidates all assets from the Lendle pool and holds them as want tokens in the strategy
+     * @dev Used during strategy migration or emergency situations to exit all positions
+     * @return The total want token balance of this strategy after complete liquidation
      */
     function liquidateAllPositions() internal override returns (uint256) {
         bool success = _totalRecall();
@@ -245,18 +257,20 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Prepares the strategy for migration to a new contract
-     * @dev Transfer logic for lTokens would be implemented here if needed
-     * @param _newStrategy Address of the new strategy contract
+     * @notice Prepares the strategy for migration to a new strategy contract
+     * @dev Currently empty as migration logic for lTokens would be implemented here if needed
+     *      Base migration of want tokens is handled automatically by BaseStrategy
+     * @param _newStrategy Address of the new strategy contract (unused in current implementation)
      */
     function prepareMigration(address _newStrategy) internal override {
         // Migration logic would be implemented here if needed
     }
 
     /**
-     * @notice Returns a list of tokens to be protected from sweep operations
-     * @dev These tokens are considered part of the strategy's core functionality
-     * @return tokens Array of protected token addresses
+     * @notice Specifies ERC20 tokens managed by this strategy that should be protected from vault sweep operations
+     * @dev Protects the configurable lToken from being swept by governance
+     *      lWMNT tokens and want tokens are automatically protected by BaseStrategy
+     * @return tokens Array of protected token addresses containing the configurable lToken
      */
     function protectedTokens()
         internal
@@ -269,10 +283,11 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Converts ETH amount to want token equivalent
-     * @dev For WMNT, this is a 1:1 conversion as both use 18 decimals
-     * @param _amtInWei The amount in wei (1e-18 ETH) to convert to want
-     * @return The equivalent amount in want token
+     * @notice Converts an amount from the native gas token's smallest unit (wei) to want tokens
+     * @dev Assumes a 1:1 value relationship since want token (WMNT) is the wrapped native token
+     *      Used by Yearn infrastructure and keepers to price gas costs relative to strategy returns
+     * @param _amtInWei The amount in wei (native gas token)
+     * @return The equivalent amount in want tokens
      */
     function ethToWant(
         uint256 _amtInWei
@@ -280,14 +295,13 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         return _amtInWei;
     }
 
-  
-
     /**
-     * @notice Calculates the current value of strategy positions and determines profit/loss
-     * @dev Compares current total assets with previous debt to determine performance
-     * @return _profit Total estimated profit since last report
-     * @return _loss Total estimated loss since last report
-     * @return _debtPayment Available liquid want tokens for debt repayment
+     * @notice Internal function to calculate profit/loss based on current assets vs debt to vault
+     * @dev Compares current total assets with the strategy's debt recorded in the vault
+     *      Returns current liquid want balance as potential debt payment amount
+     * @return _profit Calculated profit since last report
+     * @return _loss Calculated loss since last report
+     * @return _debtPayment Current liquid want token balance available for repayment
      */
     function _returnDepositPlatformValue()
         internal
@@ -309,10 +323,11 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Deposits funds into the Lendle lending market
-     * @dev Deposits WMNT and receives lWMNT tokens in return
-     * @param _amount Amount of want token to invest
-     * @return success Whether the deposit operation was successful
+     * @notice Internal function to deposit want tokens into the Lendle lending market
+     * @dev Deposits WMNT tokens and receives lWMNT tokens in return representing the position
+     *      Verifies that lWMNT tokens were actually received to ensure deposit success
+     * @param _amount Amount of want tokens to invest
+     * @return success True if the deposit operation was successful
      */
     function _investInStrategy(
         uint256 _amount
@@ -320,12 +335,7 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         if (_amount == 0) return true;
         uint256 balanceBefore = IERC20(lTokenWMNT).balanceOf(address(this));
 
-        ILendingPool(lendingPool).deposit(
-            WMNT,
-            _amount,
-            address(this),
-            0
-        );
+        ILendingPool(lendingPool).deposit(WMNT, _amount, address(this), 0);
 
         uint256 balanceAfter = IERC20(lTokenWMNT).balanceOf(address(this));
         require(
@@ -335,18 +345,20 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
         success = true;
     }
 
-    /// @notice Event emitted when there's an issue with strategy withdrawal
+    /// @notice Event emitted when there's an issue with strategy withdrawal operations
     event ProblemWithWithdrawStrategy(uint time, uint share, uint balanceAfter);
 
     /**
-     * @notice Withdraws a specific amount of want tokens from Lendle
+     * @notice Internal function to withdraw a specific amount of want tokens from Lendle
      * @dev Handles both partial and full withdrawals from the lending pool
-     * @param _amountWantToWithdraw Amount of want token to retrieve
-     * @return actualAmountReceived Actual amount returned from the withdrawal
-     * @return _loss Any loss incurred during the withdrawal (typically 0)
+     *      Uses the strategy's lWMNT balance to determine withdrawal limits
+     *      If requested amount exceeds available balance, withdraws maximum possible
+     * @param _amountWantToWithdraw Amount of want tokens to retrieve
+     * @return actualAmountReceived Actual amount of want tokens received from withdrawal
+     * @return _loss Any loss incurred during the withdrawal (typically 0 for Lendle)
      */
     function _withdrawSingleAmount(
-        uint256 _amountWantToWithdraw 
+        uint256 _amountWantToWithdraw
     ) internal returns (uint256 actualAmountReceived, uint256 _loss) {
         if (_amountWantToWithdraw == 0) {
             return (0, 0);
@@ -372,24 +384,26 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
     }
 
     /**
-     * @notice Withdraws all assets from Lendle and resets the strategy position
-     * @dev Used for complete exit from the lending protocol
-     * @return success Whether the total recall operation was successful
+     * @notice Internal function to withdraw all assets from Lendle and reset the strategy position
+     * @dev Withdraws the maximum possible amount from the lending pool to exit all positions
+     *      Used for complete exit from the lending protocol during migration or emergency
+     * @return success True if the total recall operation completed successfully
      */
     function _totalRecall() internal returns (bool success) {
         ILendingPool(lendingPool).withdraw(
             WMNT,
-            type(uint256).max, 
-            address(this) 
+            type(uint256).max,
+            address(this)
         );
 
         success = true;
     }
 
     /**
-     * @notice Returns the current Lendle share balance for the configured lToken
-     * @dev This function uses the lToken address set by setlToken()
-     * @return The current balance of lTokens held by this strategy
+     * @notice Returns the current balance of the configurable lToken held by this strategy
+     * @dev This function uses the lToken address set by setlToken() function
+     *      Separate from the main lWMNT position tracking
+     * @return The current balance of the configurable lToken held by this strategy
      */
     function currentLendleShare() public view returns (uint256) {
         return IERC20(lToken).balanceOf(address(this));
@@ -397,17 +411,19 @@ contract Strategy2nd is BaseStrategy, Ownable, Lendl {
 
     /**
      * @notice Returns the balance of lWMNT tokens held by this strategy
-     * @dev Test getter function to inspect strategy's lWMNT holdings
-     * @return The current lWMNT token balance
+     * @dev Test and monitoring getter function to inspect strategy's main lWMNT holdings
+     *      These tokens represent the strategy's primary position in the Lendle pool
+     * @return The current lWMNT token balance held by the strategy
      */
     function getBalanceWant() public view returns (uint256) {
         return IERC20(lTokenWMNT).balanceOf(address(this));
     }
 
     /**
-     * @notice Returns the emergency exit flag status
-     * @dev Test getter function to check if strategy is in emergency mode
-     * @return Whether the strategy is in emergency exit mode
+     * @notice Returns the current state of the emergency exit flag
+     * @dev Test getter function to check if the strategy is in emergency exit mode
+     *      emergencyExit flag is inherited from BaseStrategy
+     * @return True if the strategy is in emergency exit mode, false otherwise
      */
     function getEmergencyExitFlag() external view returns (bool) {
         return emergencyExit;

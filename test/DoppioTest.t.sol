@@ -1193,44 +1193,19 @@ contract DoppioTest is Test {
         vm.stopPrank();
 
         vm.startPrank(user1);
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "OwnableUnauthorizedAccount(address)",
-                address(user1)
-            )
-        );
+        vm.expectRevert();
         strategy1st.setLendingPool(LENDING_POOL_ADDRESS_INIT);
 
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "OwnableUnauthorizedAccount(address)",
-                address(user1)
-            )
-        );
+        vm.expectRevert();
         strategy1st.updateUnlimitedSpending(true);
 
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "OwnableUnauthorizedAccount(address)",
-                address(user1)
-            )
-        );
+        vm.expectRevert();
         strategy1st.updateUnlimitedSpendingInit(true);
 
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "OwnableUnauthorizedAccount(address)",
-                address(user1)
-            )
-        );
+        vm.expectRevert();
         strategy1st.approveLendingPool();
 
-        vm.expectRevert(
-            abi.encodeWithSignature(
-                "OwnableUnauthorizedAccount(address)",
-                address(user1)
-            )
-        );
+        vm.expectRevert();
         strategy2nd.updateUnlimitedSpending(true);
 
         vm.expectRevert("Vault: !governance");

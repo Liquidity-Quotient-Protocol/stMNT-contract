@@ -130,7 +130,7 @@ contract Strg1EmergencyTest is
         }
         console.log(
             "Strategy internal balanceShare (getter): %s",
-            strategy1st.getBalanceShare() //! Getter create for testing
+            strategy1st.getBalanceShare() 
         ); 
     }
 
