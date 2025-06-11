@@ -10,10 +10,13 @@ contract DeployScript is Script {
 
     // --- CONFIGURAZIONE DEGLI INDIRIZZI PER IL DEPLOYMENT ---
     
-    address public governance = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA; 
-    address public management = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA; 
+    address public deployGovernance = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;
+    address public governance = 0xFE6Ab935dc341FEe5A32970Ea2FC48a13d4af36d; 
+    address public management = 0x128C8b0Aa97e8A68630b4d5a917bCB68820a49BE; 
     address public treasury = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;   
-    address public guardian = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;   
+    address public guardian = 0x1EdF43614f1B7B448a330a6284Bf36037b17aac9;  
+    address public keeper = 0x6c1Ad07DA4C95c3D9Da4174F52C87401e9Ca3098; 
+    address public strategist = 0x2b506Fb4c70848D38Aed2e6715f65500CDa88Ba9;
     
     // --- INDIRIZZI DEI CONTRATTI SU MANTLE MAINNET ---
     address public constant WMNT_ADDRESS = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
@@ -31,7 +34,7 @@ contract DeployScript is Script {
         console.log("Deploying StMNT Vault...");
         StMNT vault = new StMNT(
             WMNT_ADDRESS,
-            governance,
+            deployerAddress,//governance,
             treasury,
             "stMNT",
             "stMNT",       
@@ -55,11 +58,20 @@ contract DeployScript is Script {
         console.log("Configuring Strategy1st...");
         strategy1st.setLendingPool(INIT_LENDING_POOL);
         strategy1st.approveLendingPool(); 
+    
 
         // 4. DECENTRALIZZAZIONE DEI RUOLI
         console.log("Setting 'management' as strategist for both strategies...");
         strategy1st.setStrategist(management);
+        strategy1st.setKeeper(keeper);
+        strategy1st.setRewards(treasury);
+        strategy1st.setStrategist(strategist);
+
+
         strategy2nd.setStrategist(management);
+        strategy2nd.setKeeper(keeper);
+        strategy2nd.setRewards(treasury);
+        strategy2nd.setStrategist(strategist);
         
         vm.stopBroadcast();
         
@@ -71,25 +83,27 @@ contract DeployScript is Script {
         console.log("Adding Strategy1st to Vault...");
         vault.addStrategy(
             address(strategy1st),
-            4500, // 45% debt ratio
+            5000, // 50% debt ratio
             0,
             type(uint256).max,
             0 
         );
-
+/*
         console.log("Adding Strategy2nd to Vault...");
         vault.addStrategy(
             address(strategy2nd),
-            4500, // 45% debt ratio
+            3000, // 30% debt ratio
             0,
             type(uint256).max,
             0
         );
-        
+*/ 
         console.log("Setting final vault fees...");
         vault.setPerformanceFee(100); // 1%
         vault.setManagementFee(100);  // 1%
         vault.setDepositLimit(type(uint256).max);
+
+        vault.setGovernance(governance);
 
         vm.stopBroadcast();
         
