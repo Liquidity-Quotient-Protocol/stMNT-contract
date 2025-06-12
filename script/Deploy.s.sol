@@ -10,10 +10,9 @@ contract DeployScript is Script {
 
     // --- CONFIGURAZIONE DEGLI INDIRIZZI PER IL DEPLOYMENT ---
     
-    address public deployGovernance = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;
     address public governance = 0xFE6Ab935dc341FEe5A32970Ea2FC48a13d4af36d; 
     address public management = 0x128C8b0Aa97e8A68630b4d5a917bCB68820a49BE; 
-    address public treasury = 0x6c64d06ef5C1da66a105893506F6Ecf8C8E191eA;   
+    address public treasury = 0x82f9a9EAeE61DDe2128F41054758a2eCa580413A;   
     address public guardian = 0x1EdF43614f1B7B448a330a6284Bf36037b17aac9;  
     address public keeper = 0x6c1Ad07DA4C95c3D9Da4174F52C87401e9Ca3098; 
     address public strategist = 0x2b506Fb4c70848D38Aed2e6715f65500CDa88Ba9;
@@ -88,7 +87,7 @@ contract DeployScript is Script {
             type(uint256).max,
             0 
         );
-/*
+
         console.log("Adding Strategy2nd to Vault...");
         vault.addStrategy(
             address(strategy2nd),
@@ -97,13 +96,13 @@ contract DeployScript is Script {
             type(uint256).max,
             0
         );
-*/ 
+
         console.log("Setting final vault fees...");
-        vault.setPerformanceFee(100); // 1%
-        vault.setManagementFee(100);  // 1%
+        vault.setPerformanceFee(1000); // 10%
+        vault.setManagementFee(0);  // 0%
         vault.setDepositLimit(type(uint256).max);
 
-        vault.setGovernance(governance);
+        //vault.setGovernance(governance);
 
         vm.stopBroadcast();
         
