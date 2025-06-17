@@ -28,8 +28,6 @@ contract Lendl {
     ) internal returns (uint256 share) {
         uint256 balanceBefore = IERC20(_lToken).balanceOf(address(this));
         
-        // Approve the lending pool to spend our tokens
-        //IERC20(_tokenIn).safeApprove(_lendingPool, _amount); //! qui deve essere gia approvato non devo approvare sempre 
         
         // Deposit to Lendle
         ILendingPool(_lendingPool).deposit(_tokenIn, _amount, address(this), 0);
