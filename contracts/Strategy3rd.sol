@@ -30,12 +30,23 @@ contract Strategy3rd is BaseStrategy {
     using Address for address;
 
     /// @notice Immutable address of the Init protocol's core/router contract.
-    address public constant rsmAddress =
-        0xeD884f0460A634C69dbb7def54858465808AACEf;
+    //address public constant rsmAddress =
+    //    0xeD884f0460A634C69dbb7def54858465808AACEf;
+
+    address public  rsmAddress ; //! solo nel test
+
+
     /// @notice Immutable address of the WMNT (Wrapped MNT) token, the 'want' token for this strategy.
     address public constant WMNT = 0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8;
 
-    IRSM constant RSM = IRSM(rsmAddress);
+    //IRSM constant RSM = IRSM(rsmAddress);
+
+    IRSM public  RSM ; //! solo nel test
+
+
+    function setMockTest(address _addr) public {
+        RSM = IRSM(_addr);
+    }
 
     /// @notice Address of the Init Protocol lending pool where funds are deposited
     /// @dev Must be set by authorized users via setLendingPool() before strategy can function
@@ -109,13 +120,14 @@ contract Strategy3rd is BaseStrategy {
      * @return The total estimated value of assets in want token terms
      */
     function estimatedTotalAssets() public view override returns (uint256) {
-        uint256 lockedAmount = RSM.deposited(address(this));
+        console.log("Arrivo qui?");
+        uint256 deposited = RSM.deposited(address(this));
         //uint256 pendingRewards = RSM.calculatePendingRewards(
         //    address(this),
         //    actualPoolId
         //);
 
-        return lockedAmount;// + pendingRewards;
+        return deposited;// + pendingRewards;
     }
 
     /**
@@ -135,8 +147,9 @@ contract Strategy3rd is BaseStrategy {
         override
         returns (uint256 _profit, uint256 _loss, uint256 _debtPayment)
     {
+        
         uint256 currentProfit = estimatedTotalAssets();
-
+        console.log("Arrivo qui?");
         _profit = currentProfit;
         _loss = 0;
 
@@ -147,7 +160,7 @@ contract Strategy3rd is BaseStrategy {
 
             if (currentLiquid < neededLiquid) {
                 uint256 amountToLiquidate = neededLiquid - currentLiquid;
-                RSM.unlockMNT(amountToLiquidate);
+                RSM.withdraw(amountToLiquidate, address(this));
                 IWMNT(WMNT).deposit{value: amountToLiquidate}();
                 _loss += amountToLiquidate;
             }
@@ -156,7 +169,7 @@ contract Strategy3rd is BaseStrategy {
             uint256 currentLiquid = want.balanceOf(address(this));
             if (currentLiquid < _profit) {
                 uint256 amountToLiquidate = _profit - currentLiquid;
-                RSM.unlockMNT(amountToLiquidate);
+                RSM.withdraw(amountToLiquidate, address(this));
                 IWMNT(WMNT).deposit{value: amountToLiquidate}();
                 _loss += amountToLiquidate;
             }
@@ -183,7 +196,7 @@ contract Strategy3rd is BaseStrategy {
             uint256 _amountToInvest = _balanceInContract - _debtOutstanding;
             if (_amountToInvest > 0) {
                 IWMNT(WMNT).withdraw(_amountToInvest); //! forse devo autorizare la spesa, mi ricordo di no vedremo
-                RSM.lockMNT(address(this).balance);
+                RSM.deposit{value: address(this).balance}(address(this).balance);
             }
         }
     }
@@ -304,7 +317,7 @@ contract Strategy3rd is BaseStrategy {
         IWMNT(WMNT).withdraw(_amount);
         uint256 mntBalance = address(this).balance;
         require(mntBalance >= _amount, "Insufficient MNT received");
-        RSM.lockMNT(address(this).balance); //! qua va convertito tutto in MNT da WMNT
+        RSM.deposit{value: address(this).balance}(address(this).balance);
         success = true;
     }
 
@@ -322,7 +335,7 @@ contract Strategy3rd is BaseStrategy {
         if (_amount == 0) return (0, 0);
 
         //! probabilmente ci dovro aggiungere dei controlli
-        RSM.unlockMNT(_amount);
+        RSM.withdraw(_amount, address(this));
         uint256 mntReceived = address(this).balance;
         IWMNT(WMNT).deposit{value: mntReceived}();
         loss_ = 0;
@@ -336,16 +349,13 @@ contract Strategy3rd is BaseStrategy {
      * @return success True if the operation completed (doesn't guarantee full recovery if pool has issues)
      */
     function _totalRecall() internal returns (bool success) {
-        (uint256 lockedAmount, ) = RSM.getLockStatus(address(this));
+        uint256 lockedAmount = estimatedTotalAssets();
 
         if (lockedAmount > 0) {
-            RSM.unlockMNT(lockedAmount);
+            RSM.withdraw(lockedAmount,address(this));
+            IWMNT(WMNT).deposit{value: address(this).balance}();
         }
 
-        // Claim rewards se disponibili
-        if (actualPoolId != 0) {
-            RSM.claimRewards(actualPoolId);
-        }
 
         // Wrap tutto il MNT ricevuto
         uint256 mntBalance = address(this).balance;

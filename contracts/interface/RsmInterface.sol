@@ -110,10 +110,10 @@ interface IRSM {
 
     /**
      * @notice Ottiene la quantità depositata da un utente
-     * @param user Indirizzo dell'utente
+     * @param account Indirizzo dell'utente
      * @return Quantità totale depositata
      */
-    function deposited(address user) external view returns (uint256);
+    function deposited(address account) external view returns (uint256);
 
     /**
      * @notice Ottiene il numero di lockup attivi per un utente
