@@ -2,6 +2,8 @@
 
 pragma solidity ^0.8.12;
 
+import {console} from "forge-std/Test.sol";
+
 import {BaseStrategy} from "@yearnvaults/contracts/BaseStrategy.sol";
 import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/IERC20.sol";
@@ -22,7 +24,7 @@ import {IWMNT} from "./interface/IWMNT.sol";
  *      Uses Init Protocol's specific mechanisms for deposit/withdrawal and requires accrueInterest() calls
  *      for accurate yield calculation and reporting
  */
-contract Strategy1st is BaseStrategy {
+contract Strategy3rd is BaseStrategy {
     using SafeERC20 for IERC20;
     using SafeERC20v4 for IERC20v4;
     using Address for address;
@@ -59,7 +61,8 @@ contract Strategy1st is BaseStrategy {
      */
     constructor(
         address _vault,
-        address _owner
+        address _owner,
+        uint256 _poolId
     )
         // Removed explicit _initAddr param here as Iinit parent likely takes it from state or constant.
         // If your Iinit constructor *requires* it, it should be:
@@ -68,6 +71,7 @@ contract Strategy1st is BaseStrategy {
         BaseStrategy(_vault)
     {
         // Initialization is handled by parent constructors.
+        actualPoolId = _poolId;
     }
 
     /**
@@ -105,13 +109,13 @@ contract Strategy1st is BaseStrategy {
      * @return The total estimated value of assets in want token terms
      */
     function estimatedTotalAssets() public view override returns (uint256) {
-        (uint256 lockedAmount, ) = RSM.getLockStatus(address(this));
-        uint256 pendingRewards = RSM.calculatePendingRewards(
-            address(this),
-            actualPoolId
-        );
+        uint256 lockedAmount = RSM.deposited(address(this));
+        //uint256 pendingRewards = RSM.calculatePendingRewards(
+        //    address(this),
+        //    actualPoolId
+        //);
 
-        return lockedAmount + pendingRewards;
+        return lockedAmount;// + pendingRewards;
     }
 
     /**
