@@ -21,7 +21,7 @@ contract MoeContract {
     constructor() {}
 
     function _swapExactTokensForTokens(
-        ILBRouter router,
+        address _router,
         uint256 amountIn,
         address tokenIn,
         address tokenOut,
@@ -29,9 +29,10 @@ contract MoeContract {
         address pair,
         address to
     ) internal returns (uint256 amountOutReal) {
+        ILBRouter router = ILBRouter(_router);
         // Approvo il router
-        IERC20(tokenIn).approve(address(router), 0); // Reset prima
-        IERC20(tokenIn).approve(address(router), amountIn); // Poi approva
+        IERC20(tokenIn).approve(_router, 0); // Reset prima
+        IERC20(tokenIn).approve(_router, amountIn); // Poi approva
         // Preparo il path
         address[] memory tokenPath = new address[](2);
         tokenPath[0] = tokenIn;
