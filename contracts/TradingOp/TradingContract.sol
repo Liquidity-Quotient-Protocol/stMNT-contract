@@ -21,22 +21,18 @@ contract TradingContract is PriceLogic, MoeContract {
     IERC20 private constant USDT =
         IERC20(0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE);
 
-    address public constant router = 0xEfB43E833058Cd3464497e57428eFb00dB000763; // Merchant Moe router (LoopingHook)
-    address public constant pair = 0x7d35BA038df5afDe64a1962683ffeB3e150637fF; // MNT/USDe LB Pair
+    address public constant router = 0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe router (LoopingHook)
+    address public constant poolSwap =
+        0x45A62B090DF48243F12A21897e7ed91863E2c86b; // MNT/USDt
 
     address internal constant LBRouter =
-        0xEfB43E833058Cd3464497e57428eFb00dB000763; // Merchant Moe LBRouter
-
-    address internal poolSwap = 0x2bd5E1C8F9f2d2fA2cDdF2C4C8DAc1B8D907C3f5;
-
+        0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
 
     // mnt/usd -> 0xD97F20bEbeD74e8144134C4b148fE93417dd0F96
 
     // usdt/usd -> 0xd86048D5e4fe96157CE03Ae519A9045bEDaa6551
 
     constructor(address _priceFeedAddress) PriceLogic(_priceFeedAddress) {}
-
-
 
     struct ShortOp {
         bool isOpen;
@@ -58,11 +54,10 @@ contract TradingContract is PriceLogic, MoeContract {
     uint256 private mntBalance;
     uint256 private usdBalance;
 
-
     function getShortOpCounter() external view returns (uint256) {
         return shortOpCounter;
     }
-    
+
     function getShortOp(uint256 index) external view returns (ShortOp memory) {
         return shortOps[index];
     }
@@ -75,16 +70,14 @@ contract TradingContract is PriceLogic, MoeContract {
         return usdBalance;
     }
 
-
-
     //* -- EXTERNAL FUNCTIONS TO MANAGE THE STRATEGY -- *//
-
 
     function executeShortOpen(
         uint256 entryPrice,
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
+        uint256 deadline,
         uint256 stopLoss,
         uint256 takeProfit
     ) external returns (bool success) {
@@ -93,30 +86,26 @@ contract TradingContract is PriceLogic, MoeContract {
             exitPrice,
             amountMntSell,
             minUsdtToBuy,
+            deadline,
             stopLoss,
             takeProfit
         );
     }
 
-
-    function executeShortClose(uint256 indexOp) external returns (bool success) {
-        success = _shortClose(indexOp);
+    function executeShortClose(
+        uint256 indexOp,uint256 deadline
+    ) external returns (bool success) {
+        success = _shortClose(indexOp,  deadline);
     }
 
-
-
-
-
-
-
     //*------------------------------ SHORT OPERATIONS --------------------
-
 
     function _shortOpen(
         uint256 entryPrice,
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
+        uint256 deadline,
         uint256 stopLoss,
         uint256 takeProfit
     ) internal returns (bool success) {
@@ -131,15 +120,19 @@ contract TradingContract is PriceLogic, MoeContract {
             "Strategy3rd: Not enough MNT to sell for short."
         );
 
+        address[] memory path = new address[](2);
+        path[0] = address(WMNT);
+        path[1] = address(USDT);
+
         //? faccio ora lo swap da MNT a USDT
         uint256 usdReceiver = _swapExactTokensForTokens(
             LBRouter,
             amountMntSell,
             address(WMNT),
-            0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B, // USDT
-            20, // bin step
-            poolSwap, // pair MNT/USDT
-            address(this)
+            minUsdtToBuy,
+            path,
+            address(this),
+            deadline
         );
 
         require(
@@ -166,7 +159,7 @@ contract TradingContract is PriceLogic, MoeContract {
         return true;
     }
 
-    function _shortClose(uint256 indexOp) internal returns (bool success) {
+    function _shortClose(uint256 indexOp,uint256 deadline) internal returns (bool success) {
         ShortOp storage closingOP = shortOps[indexOp];
         require(
             closingOP.isOpen,
@@ -176,15 +169,19 @@ contract TradingContract is PriceLogic, MoeContract {
         closingOP.isOpen = false;
         closingOP.exitTime = uint16(block.timestamp);
 
+        address[] memory path = new address[](2);
+        path[0] = address(USDT);
+        path[1] = address(WMNT);
+
         //? faccio ora lo swap da USDT a MNT
         uint256 mntReceiver = _swapExactTokensForTokens(
             LBRouter,
             closingOP.amountUSDTtoBuy,
-            0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B, // USDT
-            address(WMNT),
-            20, // bin step
-            poolSwap, // pair MNT/USDT
-            address(this)
+            address(USDT),
+            1, //!! PER ORA VA BENE COSI MA DECO CALCOLARE LO SLIPAGE SE NO ADDIO
+            path,
+            address(this),
+            deadline
         );
 
         closingOP.exitPrice = uint256(
@@ -200,36 +197,22 @@ contract TradingContract is PriceLogic, MoeContract {
         return true;
     }
 
-
-
     //*---------------------------------------------------------------------
 
-
-        function _longOP() internal returns (bool success) {
+    function _longOP() internal returns (bool success) {
         //! per fare long, devo depositare MNT, prendere in prestito USD e swapparli in MNT
         // Todo : Capire dove depositare MNT per prendere USD a buon mercato, e gestire il debito e capire quanto ho in valore di MNT per il shanity check
     }
 
-
-
-
     //* TEST FUNCTIONS
 
     function putUSDBalance(uint256 amount) external {
-        USDT.transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        USDT.transferFrom(msg.sender, address(this), amount);
         usdBalance += amount;
     }
 
     function putMNTBalance(uint256 amount) external {
-        WMNT.transferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        WMNT.transferFrom(msg.sender, address(this), amount);
         mntBalance += amount;
     }
 

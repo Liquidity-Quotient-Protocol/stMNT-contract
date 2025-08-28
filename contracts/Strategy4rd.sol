@@ -116,37 +116,9 @@ contract Strategy3rd is BaseStrategy, PriceLogic, Iinit, MoeContract {
 
         //! DEVO CAPIRE COME GESTIRE IL DEBITO DELLA STRATEGIA NEI CONFRONTI DELLA VAULT
 
-        //? faccio ora lo swap da MNT a USDT
-        uint256 usdReceiver = _swapExactTokensForTokens(
-            LBRouter,
-            amountMntSell,
-            address(want),
-            0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B, // USDT
-            20, // bin step
-            poolSwap, // pair MNT/USDT
-            address(this)
-        );
+    
 
-        require(
-            usdReceiver >= minUsdtToBuy,
-            "Strategy3rd: Slippage too high on short open swap."
-        );
-
-        //? ora registro l'operazione
-        ShortOp memory newShort = ShortOp({
-            isOpen: true,
-            entryTime: uint16(block.timestamp),
-            exitTime: 0,
-            entryPrice: entryPrice,
-            exitPrice: exitPrice,
-            amountMntSell: amountMntSell,
-            amountUSDTtoBuy: usdReceiver,
-            stopLoss: stopLoss,
-            takeProfit: takeProfit,
-            result: 0
-        });
-
-        shortOps[actualCount] = newShort;
+ 
 
         return true;
     }
@@ -160,25 +132,9 @@ contract Strategy3rd is BaseStrategy, PriceLogic, Iinit, MoeContract {
         closingOP.isOpen = false;
         closingOP.exitTime = uint16(block.timestamp);
 
-        //? faccio ora lo swap da USDT a MNT
-        uint256 mntReceiver = _swapExactTokensForTokens(
-            LBRouter,
-            closingOP.amountUSDTtoBuy,
-            0x3B3Ac5386837Dc563660FB6a0937DFAa5924333B, // USDT
-            address(want),
-            20, // bin step
-            poolSwap, // pair MNT/USDT
-            address(this)
-        );
+
 
         closingOP.exitPrice = uint256(getChainlinkDataFeedLatestAnswer()*1e10);
-
-
-        if(mntReceiver >= closingOP.amountMntSell){
-            closingOP.result = int256(mntReceiver - closingOP.amountMntSell);
-        } else {
-            closingOP.result = -int256(closingOP.amountMntSell - mntReceiver);
-        }
 
         return true;
 

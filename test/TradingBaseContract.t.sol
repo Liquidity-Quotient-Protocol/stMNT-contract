@@ -58,10 +58,11 @@ contract TradingBaseContract is Test {
     }
 
     function openShortOp(
-        uint256 entryPrice,
+       uint256 entryPrice,
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
+        uint256 deadline,
         uint256 stopLoss,
         uint256 takeProfit
     ) internal {
@@ -71,7 +72,8 @@ contract TradingBaseContract is Test {
             amountMntSell,
             minUsdtToBuy,
             stopLoss,
-            takeProfit
+            takeProfit,
+            deadline
         );
 
         TradingContract.ShortOp memory op = tradingContract.getShortOp(
@@ -88,7 +90,7 @@ contract TradingBaseContract is Test {
     }
 
     function closeShortOp(uint256 index) internal {
-        tradingContract.executeShortClose(index);
+        tradingContract.executeShortClose(index, block.timestamp + 1000);
         TradingContract.ShortOp memory op = tradingContract.getShortOp(index);
         assert(op.isOpen == false);
         console.log("Short Operation closed successfully");
@@ -101,18 +103,13 @@ contract TradingBaseContract is Test {
         console.log("Result (in MNT):", op.result);
     }
 
-
-
-
-    function testSetUp()public {
+    function testSetUp() public {
         setUp();
         assert(address(tradingContract) != address(0));
         console.log("TradingContract deployed at:", address(tradingContract));
     }
 
-
-
-    function testSimpleShort()public{
+    function testSimpleShort() public {
         setUp();
 
         address user = address(1);
@@ -124,14 +121,65 @@ contract TradingBaseContract is Test {
 
         depoistMNTtoContract(user, mntAmount);
         depoistUSDtoContract(user, usdAmount);
+
+        uint256 initialUSDTBalance = USDT.balanceOf(address(tradingContract));
         openShortOp(
             2000 * 1e18,
-            1500 * 1e18,
-
+            1800 * 1e18,
             0.5 ether,
-            950 * 1e6,
-            2500 * 1e18,
-            1200 * 1e18
+            0,
+            block.timestamp + 1000,
+            2100 * 1e18,
+            1700 * 1e18
         );
+
+        assertGt(
+            USDT.balanceOf(address(tradingContract)),
+            initialUSDTBalance
+        );
+        console.log("More USDt then start");
+    }
+
+
+     function testSimpleShortOpenAndClose() public {
+        setUp();
+
+        address user = address(1);
+        uint256 mntAmount = 1 ether;
+        uint256 usdAmount = 2000 * 1e6;
+
+        getMeMNT(user, mntAmount);
+        getMeUSD(user, usdAmount);
+
+        depoistMNTtoContract(user, mntAmount);
+        depoistUSDtoContract(user, usdAmount);
+
+        uint256 initialUSDTBalance = USDT.balanceOf(address(tradingContract));
+        openShortOp(
+            2000 * 1e18,
+            1800 * 1e18,
+            0.5 ether,
+            0,
+            block.timestamp + 1000,
+            2100 * 1e18,
+            1700 * 1e18
+        );
+
+        assertGt(
+            USDT.balanceOf(address(tradingContract)),
+            initialUSDTBalance,
+            "TradingContract should have more USDT after opening short."
+        );
+
+
+        closeShortOp(tradingContract.getShortOpCounter() - 1);
+
+        assertEq(
+            USDT.balanceOf(address(tradingContract)),
+            initialUSDTBalance,
+            "TradingContract should have the same USDT after closing short."
+        );
+
+
     }
 }

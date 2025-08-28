@@ -29,26 +29,16 @@ interface ILBRouter {
         uint256 deadline;
     }
 
-    struct Path {
-        uint256[] pairBinSteps;
-        Version[] versions;
-        address[] tokenPath;
-    }
 
     function swapExactTokensForTokens(
         uint256 amountIn,
         uint256 amountOutMin,
-        Path calldata path,
+        address[] calldata path,
         address to,
         uint256 deadline
     ) external returns (uint256 amountOutReal);
 
-    function swapExactETHForTokens(
-        uint256 amountOutMin,
-        Path calldata path,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256 amountOutReal);
+
 
     function getSwapOut(
         address pair,
@@ -72,24 +62,22 @@ interface ILBRouter {
             uint256[] memory liquidityMinted
         );
 
-    function removeLiquidity(
-        IERC20 tokenX,
-        IERC20 tokenY,
-        uint16 binStep,
-        uint256 amountXMin,
-        uint256 amountYMin,
-        uint256[] memory ids,
-        uint256[] memory amounts,
-        address to,
-        uint256 deadline
-    ) external returns (uint256 amountX, uint256 amountY);
-
-    function getBinStep(address pair) external view returns (uint256);
-    function weth() external view returns (address);
 }
 
 interface ILBFactory {
     function getBinStep(address pair) external view returns (uint256);
+     struct LBPairInformation {
+        uint16 binStep;
+        address LBPair;
+        bool createdByOwner;
+        bool ignoredForRouting;
+    }
+    
+    function getLBPairInformation(
+        address tokenA, 
+        address tokenB, 
+        uint256 binStep
+    ) external view returns (LBPairInformation memory);
 }
 
 interface ILBPair {
