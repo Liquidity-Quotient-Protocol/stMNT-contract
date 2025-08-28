@@ -10,8 +10,9 @@ import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/util
 
 import {PriceLogic} from "./ChainlinkOp.sol";
 import {MoeContract} from "../TradingOp/SwapOperation.sol";
+import {Iinit} from "../DefiProtocol/InitProt.sol";
 
-contract TradingContract is PriceLogic, MoeContract {
+contract TradingContract is PriceLogic, MoeContract, Iinit {
     using SafeERC20 for IERC20;
     using Address for address;
 
@@ -21,18 +22,20 @@ contract TradingContract is PriceLogic, MoeContract {
     IERC20 private constant USDT =
         IERC20(0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE);
 
-    address public constant router = 0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe router (LoopingHook)
     address public constant poolSwap =
         0x45A62B090DF48243F12A21897e7ed91863E2c86b; // MNT/USDt
 
     address internal constant LBRouter =
         0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
 
-    // mnt/usd -> 0xD97F20bEbeD74e8144134C4b148fE93417dd0F96
+     address public constant _initAddr =
+        0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
 
-    // usdt/usd -> 0xd86048D5e4fe96157CE03Ae519A9045bEDaa6551
+    address public lendingPool;
 
-    constructor(address _priceFeedAddress) PriceLogic(_priceFeedAddress) {}
+    uint256 private balanceShare;
+
+    constructor(address _priceFeedAddress) PriceLogic(_priceFeedAddress) Iinit(_initAddr) {}
 
     struct ShortOp {
         bool isOpen;
@@ -68,6 +71,15 @@ contract TradingContract is PriceLogic, MoeContract {
 
     function getUsdBalance() external view returns (uint256) {
         return usdBalance;
+    }
+
+
+    function setLendingPool(address _lendingPool) external  {
+        require(
+            _lendingPool != address(0),
+            "Strategy1st: Invalid LendingPool address."
+        );
+        lendingPool = _lendingPool;
     }
 
     //* -- EXTERNAL FUNCTIONS TO MANAGE THE STRATEGY -- *//
@@ -199,9 +211,72 @@ contract TradingContract is PriceLogic, MoeContract {
 
     //*---------------------------------------------------------------------
 
-    function _longOP() internal returns (bool success) {
+
+
+
+
+    //*------------------------------ LONG OPERATIONS --------------------
+
+
+    uint256 private balanceshare;
+
+    function _depositMNTforUSD(uint256 _amount) internal returns (bool success,uint256 share) {
+
+        uint256 share = depositInit(lendingPool, address(WMNT), _amount, address(this));
+
+        balanceshare += share;
+
+        //! PER ORA CI TENIAMO SEMPLICI MA VANNO AGGIUNTI CONTROLLI E TRACKING DEI DEPOSITI E DEBITI
+       success = true;
+
+    }
+
+    bool private positonOpened;
+    uint256 private positionId;
+
+    function _createInitPosition() internal returns (bool success,uint256 posId) {
+        uint16 mode = 2; // 1 = isolated, 2 = cross
+        posId =  createInitPosition(mode, address(this));
+        positionId = posId;
+        positonOpened = true;
+        success = true;
+    }
+
+
+
+
+    struct LongOp {
+        bool isOpen;
+        uint16 entryTime;
+        uint16 exitTime;
+        uint256 entryPrice;
+        uint256 exitPrice;
+        uint256 amountMntSell;
+        uint256 amountUSDTtoBuy;
+        uint256 stopLoss;
+        uint256 takeProfit;
+        int256 result; //in MNT
+    }
+
+
+    uint256 private longOpCounter;
+
+    mapping(uint256 => ShortOp) private longOps;
+
+
+    function _longOP(uint256 _amount) internal returns (bool success) {
         //! per fare long, devo depositare MNT, prendere in prestito USD e swapparli in MNT
-        // Todo : Capire dove depositare MNT per prendere USD a buon mercato, e gestire il debito e capire quanto ho in valore di MNT per il shanity check
+
+        (,uint256 share)=_depositMNTforUSD(_amount);
+
+        if(!positonOpened){
+            (,uint256 _posId) = _createInitPosition();
+            addCollateral(_posId, lendingPool, share);
+        }else{
+            addCollateral(positionId, lendingPool, share);
+        }
+
+
     }
 
     //* TEST FUNCTIONS

@@ -5,25 +5,20 @@ import {IInitCore, ILendingPool} from "../interface/IInitCore.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-
 contract Iinit {
     using SafeERC20 for IERC20;
 
-/*
     address public constant factory =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5; // InitCore (Factory)
 
     address internal constant INIT_CORE =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5; // InitCore
 
-    //address internal constant LBROUTER =
-    //    0xEfB43E833058Cd3464497e57428eFb00dB000763; // LoopingHook via Merchant Moe (Router per swap)
-
     address internal constant POS_MANAGER =
         0x0e7401707CD08c03CDb53DAEF3295DDFb68BBa92; // PosManager
-*/
 
     IInitCore internal initCore;
+
     constructor(address _initCore) {
         initCore = IInitCore(_initCore);
     }
@@ -60,7 +55,6 @@ contract Iinit {
         emit PositionCreated(posId, msg.sender);
     }
 
-/*
     // Add inToken as collateral to a position
     function addCollateral(
         uint256 posId,
@@ -105,5 +99,5 @@ contract Iinit {
         IERC20(underlyingToken).approve(INIT_CORE, repayAmount);
 
         repaidAmount = initCore.repay(lendingPool, repayShares, posId);
-    }*/
+    }
 }
