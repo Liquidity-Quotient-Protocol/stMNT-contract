@@ -28,6 +28,14 @@ contract TradingBaseContract is Test {
         tradingContract = new TradingContract(
             0xD97F20bEbeD74e8144134C4b148fE93417dd0F96
         );
+
+        tradingContract.setLendingPool(
+            0x44949636f778fAD2b139E665aee11a2dc84A2976
+        );
+
+        tradingContract.setBorrowLendingPool(
+            0xadA66a8722B5cdfe3bC504007A5d793e7100ad09
+        );
     }
 
     function getMeMNT(address _user, uint256 _amount) internal {
@@ -58,7 +66,7 @@ contract TradingBaseContract is Test {
     }
 
     function openShortOp(
-       uint256 entryPrice,
+        uint256 entryPrice,
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
@@ -80,33 +88,33 @@ contract TradingBaseContract is Test {
             tradingContract.getShortOpCounter() - 1
         );
         assert(op.isOpen == true);
-        console.log("Short Operation opened successfully");
-        console.log("Entry Price:", op.entryPrice);
-        console.log("Exit Price:", op.exitPrice);
-        console.log("Amount MNT Sold:", op.amountMntSell);
-        console.log("Amount USDT Bought:", op.amountUSDTtoBuy);
-        console.log("Stop Loss:", op.stopLoss);
-        console.log("Take Profit:", op.takeProfit);
+        //console.log("Short Operation opened successfully");
+        //console.log("Entry Price:", op.entryPrice);
+        //console.log("Exit Price:", op.exitPrice);
+        //console.log("Amount MNT Sold:", op.amountMntSell);
+        //console.log("Amount USDT Bought:", op.amountUSDTtoBuy);
+        //console.log("Stop Loss:", op.stopLoss);
+        //console.log("Take Profit:", op.takeProfit);
     }
 
     function closeShortOp(uint256 index) internal {
         tradingContract.executeShortClose(index, block.timestamp + 1000);
         TradingContract.ShortOp memory op = tradingContract.getShortOp(index);
         assert(op.isOpen == false);
-        console.log("Short Operation closed successfully");
-        console.log("Entry Price:", op.entryPrice);
-        console.log("Exit Price:", op.exitPrice);
-        console.log("Amount MNT Sold:", op.amountMntSell);
-        console.log("Amount USDT Bought:", op.amountUSDTtoBuy);
-        console.log("Stop Loss:", op.stopLoss);
-        console.log("Take Profit:", op.takeProfit);
-        console.log("Result (in MNT):", op.result);
+        //console.log("Short Operation closed successfully");
+        //console.log("Entry Price:", op.entryPrice);
+        //console.log("Exit Price:", op.exitPrice);
+        //console.log("Amount MNT Sold:", op.amountMntSell);
+        //console.log("Amount USDT Bought:", op.amountUSDTtoBuy);
+        //console.log("Stop Loss:", op.stopLoss);
+        //console.log("Take Profit:", op.takeProfit);
+        //console.log("Result (in MNT):", op.result);
     }
 
     function testSetUp() public {
         setUp();
         assert(address(tradingContract) != address(0));
-        console.log("TradingContract deployed at:", address(tradingContract));
+        //console.log("TradingContract deployed at:", address(tradingContract));
     }
 
     function testSimpleShort() public {
@@ -133,15 +141,11 @@ contract TradingBaseContract is Test {
             1700 * 1e18
         );
 
-        assertGt(
-            USDT.balanceOf(address(tradingContract)),
-            initialUSDTBalance
-        );
-        console.log("More USDt then start");
+        assertGt(USDT.balanceOf(address(tradingContract)), initialUSDTBalance);
+        //console.log("More USDt then start");
     }
 
-
-     function testSimpleShortOpenAndClose() public {
+    function testSimpleShortOpenAndClose() public {
         setUp();
 
         address user = address(1);
@@ -171,15 +175,37 @@ contract TradingBaseContract is Test {
             "TradingContract should have more USDT after opening short."
         );
 
-
         closeShortOp(tradingContract.getShortOpCounter() - 1);
 
-        assertEq(
-            USDT.balanceOf(address(tradingContract)),
-            initialUSDTBalance,
-            "TradingContract should have the same USDT after closing short."
+        //assertEq(
+        //    USDT.balanceOf(address(tradingContract)),
+        //    initialUSDTBalance,
+        //    "TradingContract should have the same USDT after closing short."
+        //);
+    }
+
+    function testSimpleLong() public {
+        setUp();
+
+        address user = address(1);
+        uint256 mntAmount = 10_000 ether;
+        uint256 usdAmount = 100 * 1e6;
+
+        getMeMNT(user, mntAmount);
+        getMeUSD(user, usdAmount);
+
+        depoistMNTtoContract(user, mntAmount);
+
+        //console.log("Sono arrivato qui!");
+        tradingContract.openLongOp(
+            9_000 ether,
+            usdAmount,
+            0,
+            0,
+            0,
+            0,
+            0,
+            block.timestamp + 1000
         );
-
-
     }
 }

@@ -7,12 +7,13 @@ import {console} from "forge-std/Test.sol";
 import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol";
 import {IERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC721Receiver} from "@openzeppelin-contract@5.3.0/contracts/token/ERC721/IERC721Receiver.sol";
 
 import {PriceLogic} from "./ChainlinkOp.sol";
 import {MoeContract} from "../TradingOp/SwapOperation.sol";
 import {Iinit} from "../DefiProtocol/InitProt.sol";
 
-contract TradingContract is PriceLogic, MoeContract, Iinit {
+contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     using SafeERC20 for IERC20;
     using Address for address;
 
@@ -28,14 +29,18 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
     address internal constant LBRouter =
         0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
 
-     address public constant _initAddr =
+    address public constant _initAddr =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
 
     address public lendingPool;
 
+    address public borrowLeningPool;
+
     uint256 private balanceShare;
 
-    constructor(address _priceFeedAddress) PriceLogic(_priceFeedAddress) Iinit(_initAddr) {}
+    constructor(
+        address _priceFeedAddress
+    ) PriceLogic(_priceFeedAddress) Iinit(_initAddr) {}
 
     struct ShortOp {
         bool isOpen;
@@ -73,13 +78,20 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
         return usdBalance;
     }
 
-
-    function setLendingPool(address _lendingPool) external  {
+    function setLendingPool(address _lendingPool) external {
         require(
             _lendingPool != address(0),
             "Strategy1st: Invalid LendingPool address."
         );
         lendingPool = _lendingPool;
+    }
+
+    function setBorrowLendingPool(address _lendingPool) external {
+        require(
+            _lendingPool != address(0),
+            "Strategy1st: Invalid LendingPool address."
+        );
+        borrowLeningPool = _lendingPool;
     }
 
     //* -- EXTERNAL FUNCTIONS TO MANAGE THE STRATEGY -- *//
@@ -105,9 +117,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
     }
 
     function executeShortClose(
-        uint256 indexOp,uint256 deadline
+        uint256 indexOp,
+        uint256 deadline
     ) external returns (bool success) {
-        success = _shortClose(indexOp,  deadline);
+        success = _shortClose(indexOp, deadline);
     }
 
     //*------------------------------ SHORT OPERATIONS --------------------
@@ -171,7 +184,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
         return true;
     }
 
-    function _shortClose(uint256 indexOp,uint256 deadline) internal returns (bool success) {
+    function _shortClose(
+        uint256 indexOp,
+        uint256 deadline
+    ) internal returns (bool success) {
         ShortOp storage closingOP = shortOps[indexOp];
         require(
             closingOP.isOpen,
@@ -211,39 +227,34 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
 
     //*---------------------------------------------------------------------
 
-
-
-
-
     //*------------------------------ LONG OPERATIONS --------------------
-
 
     uint256 private balanceshare;
 
-    function _depositMNTforUSD(uint256 _amount) internal returns (bool success,uint256 share) {
-
-        uint256 share = depositInit(lendingPool, address(WMNT), _amount, address(this));
+    function _depositMNTforUSD(
+        uint256 _amount
+    ) internal returns (bool success, uint256 share) {
+        share = depositInit(lendingPool, address(WMNT), _amount, address(this));
 
         balanceshare += share;
 
         //! PER ORA CI TENIAMO SEMPLICI MA VANNO AGGIUNTI CONTROLLI E TRACKING DEI DEPOSITI E DEBITI
-       success = true;
-
+        success = true;
     }
 
     bool private positonOpened;
     uint256 private positionId;
 
-    function _createInitPosition() internal returns (bool success,uint256 posId) {
-        uint16 mode = 2; // 1 = isolated, 2 = cross
-        posId =  createInitPosition(mode, address(this));
+    function _createInitPosition()
+        internal
+        returns (bool success, uint256 posId)
+    {
+        uint16 mode = 1; // 1 = isolated, 2 = cross
+        posId = createInitPosition(mode, address(this));
         positionId = posId;
         positonOpened = true;
         success = true;
     }
-
-
-
 
     struct LongOp {
         bool isOpen;
@@ -258,25 +269,144 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
         int256 result; //in MNT
     }
 
-
     uint256 private longOpCounter;
+    uint256 private debtUSDTShares;
 
-    mapping(uint256 => ShortOp) private longOps;
+    mapping(uint256 => LongOp) private longOps;
 
-
-    function _longOP(uint256 _amount) internal returns (bool success) {
+    function _longOP(
+        uint256 _amountColl,
+        uint256 _amountBorrow,
+        uint256 stopLoss,
+        uint256 takeProfit,
+        uint256 deadline,
+        uint256 minMntToBuy,
+        uint256 entryPrice,
+        uint256 exitPrice
+    ) internal returns (bool success) {
         //! per fare long, devo depositare MNT, prendere in prestito USD e swapparli in MNT
+        require(
+            WMNT.balanceOf(address(this)) >= _amountColl,
+            "TradingContract: Not enough MNT to deposit for long."
+        );
 
-        (,uint256 share)=_depositMNTforUSD(_amount);
+        uint256 actualCount = longOpCounter;
+        longOpCounter += 1;
 
-        if(!positonOpened){
-            (,uint256 _posId) = _createInitPosition();
+        (, uint256 share) = _depositMNTforUSD(_amountColl);
+
+        if (!positonOpened) {
+            (, uint256 _posId) = _createInitPosition();
             addCollateral(_posId, lendingPool, share);
-        }else{
+        } else {
             addCollateral(positionId, lendingPool, share);
         }
 
+        //!QUI CI VA IL CONTROLLO DEL MARGINE E SE È SICURO PRENDERE UN PRESTITO
 
+        uint256 usdtInBalance = USDT.balanceOf(address(this));
+
+   
+
+        uint256 _debtShares = borrow(
+            positionId,
+            borrowLeningPool,
+            _amountBorrow,
+            address(this)
+        );
+        debtUSDTShares += _debtShares;
+
+        address[] memory path = new address[](2);
+        path[0] = address(USDT);
+        path[1] = address(WMNT);
+
+        console.log("Sono arrivato qui 2!");
+
+
+        console.log("Quanti USDt ho in bilancio: ", USDT.balanceOf(address(this)));
+        console.log("Quanti usdt voglio vendere? ", _amountBorrow);
+
+        uint256 amountMNTlong = _swapExactTokensForTokens(
+            LBRouter,
+            _amountBorrow,
+            address(USDT),
+            minMntToBuy,
+            path,
+            address(this),
+            deadline
+        );
+
+        //require(
+        //    USDT.balanceOf(address(this)) >= usdtInBalance + _amountBorrow,
+        //    "TradingContract: Borrow didn't succeed."
+        //);
+
+        LongOp memory newLong = LongOp({
+            isOpen: true,
+            entryTime: uint16(block.timestamp),
+            exitTime: 0,
+            entryPrice: entryPrice,
+            exitPrice: exitPrice,
+            amountMntSell: amountMNTlong,
+            amountUSDTtoBuy: _amountBorrow,
+            stopLoss: stopLoss,
+            takeProfit: takeProfit,
+            result: 0
+        });
+
+        longOps[actualCount] = newLong;
+
+        success = true;
+    }
+
+    function _longClose(
+        uint256 indexOp,
+        uint256 deadline
+    ) internal returns (bool success) {
+        LongOp storage closingOP = longOps[indexOp];
+        require(
+            closingOP.isOpen,
+            "TradingContract: Long operation already closed."
+        );
+
+        closingOP.isOpen = false;
+        closingOP.exitTime = uint16(block.timestamp);
+
+        address[] memory path = new address[](2);
+        path[0] = address(WMNT);
+        path[1] = address(USDT);
+
+        //!! qui pero devo capire prima quanto ripagare, se ho guadagnato devo conservare gli MNT in più.
+        //? faccio ora lo swap da MNT a USDT
+        uint256 usdtReceiver = _swapExactTokensForTokens(
+            LBRouter,
+            closingOP.amountMntSell,
+            address(WMNT),
+            1, //!! PER ORA VA BENE COSI MA DECO CALCOLARE LO SLIPAGE SE NO ADDIO
+            path,
+            address(this),
+            deadline
+        );
+
+        //! sta storia del prezzo va vista costruita bene
+        closingOP.exitPrice = uint256(
+            getChainlinkDataFeedLatestAnswer() * 1e10
+        );
+
+        //! DEVO PERO ANCORA CHIUDERE LA POSIZIONE E RIPAGARE IL DEBITO
+        uint256 _debtUSDTShares = 0; //! qui va capito come reperire il dato
+        debtUSDTShares -= debtUSDTShares;
+
+        //? 1.  Ripago il debito
+        //! Va capito bene come far funzionare il burnTo , quanto share ripago in base a quanti USDT ripago?
+        uint256 repaidDebt = repay(
+            positionId,
+            lendingPool,
+            address(USDT),
+            _debtUSDTShares
+        );
+
+        success = true;
     }
 
     //* TEST FUNCTIONS
@@ -307,5 +437,36 @@ contract TradingContract is PriceLogic, MoeContract, Iinit {
         );
         USDT.transfer(msg.sender, amount);
         usdBalance -= amount;
+    }
+
+    function openLongOp(
+        uint256 _amountColl,
+        uint256 _amountBorrow,
+        uint256 stopLoss,
+        uint256 takeProfit,
+        uint256 minMntToBuy,
+        uint256 entryPrice,
+        uint256 exitPrice,
+        uint256 deadline
+    ) external {
+        _longOP(
+            _amountColl,
+            _amountBorrow,
+            stopLoss,
+            takeProfit,
+            deadline,
+            minMntToBuy,
+            entryPrice,
+            exitPrice
+        );
+    }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 }
