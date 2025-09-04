@@ -31,12 +31,12 @@ contract MoeContract {
         IERC20(tokenIn).approve(_router, 0); 
         IERC20(tokenIn).approve(_router, amountIn); 
 
+
         amountOutReal = router.swapExactTokensForTokens(
             amountIn,
             minAmountOut,
             tokenPath,
-            to,
-            deadline
+            to
         );
     }
 }

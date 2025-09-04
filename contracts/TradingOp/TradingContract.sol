@@ -26,10 +26,15 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         IERC20(0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE);
 
     address public constant poolSwap =
-        0x45A62B090DF48243F12A21897e7ed91863E2c86b; // MNT/USDt
+        0xB52b1F5e08c04a8c33F4C7363fa2DE23B9BC169f;
+    //0x45A62B090DF48243F12A21897e7ed91863E2c86b; // MNT/USDt
 
-    address internal constant LBRouter =
-        0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
+    //address internal constant LBRouter =
+    //    0x319B69888b0d11cEC22caA5034e25FfFBDc88421;
+    //    //0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
+
+    address internal constant AgniRouter =
+        0xB52b1F5e08c04a8c33F4C7363fa2DE23B9BC169f;
 
     address public constant _initAddr =
         0x972BcB0284cca0152527c4f70f8F689852bCAFc5;
@@ -66,6 +71,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     function getShortOpCounter() external view returns (uint256) {
         return shortOpCounter;
+    }
+
+    function getLongOpCounter() external view returns (uint256) {
+        return longOpCounter;
     }
 
     function getShortOp(uint256 index) external view returns (ShortOp memory) {
@@ -153,7 +162,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
         //? faccio ora lo swap da MNT a USDT
         uint256 usdReceiver = _swapExactTokensForTokens(
-            LBRouter,
+            AgniRouter,
             amountMntSell,
             address(WMNT),
             minUsdtToBuy,
@@ -205,7 +214,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
         //? faccio ora lo swap da USDT a MNT
         uint256 mntReceiver = _swapExactTokensForTokens(
-            LBRouter,
+            AgniRouter,
             closingOP.amountUSDTtoBuy,
             address(USDT),
             1, //!! PER ORA VA BENE COSI MA DECO CALCOLARE LO SLIPAGE SE NO ADDIO
@@ -282,11 +291,12 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint16 exitTime;
         uint256 entryPrice;
         uint256 exitPrice;
-        uint256 amountMntSell;
-        uint256 amountUSDTtoBuy;
+        uint256 amountMntBought; // MNT comprati con leva (ex amountMntSell)
+        uint256 amountUSDTBorrowed; // USDT presi in prestito (ex amountUSDTtoBuy)
+        uint256 collateralShares; // ✅ AGGIUNTO: shares di collaterale depositate
+        uint256 debtUSDTShares; // shares di debito USDT
         uint256 stopLoss;
         uint256 takeProfit;
-        uint256 debtUSDTShares;
         int256 result; //in MNT
     }
 
@@ -305,7 +315,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 entryPrice,
         uint256 exitPrice
     ) internal returns (bool success) {
-        //! per fare long, devo depositare MNT, prendere in prestito USD e swapparli in MNT
         require(
             WMNT.balanceOf(address(this)) >= _amountColl,
             "TradingContract: Not enough MNT to deposit for long."
@@ -314,19 +323,17 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 actualCount = longOpCounter;
         longOpCounter += 1;
 
-        (, uint256 share) = _depositMNTforUSD(_amountColl);
+        // Deposita MNT e ottieni shares
+        (, uint256 collateralShares) = _depositMNTforUSD(_amountColl);
 
         if (!positonOpened) {
             (, uint256 _posId) = _createInitPosition();
-            addCollateral(_posId, lendingPool, share);
+            addCollateral(_posId, lendingPool, collateralShares);
         } else {
-            addCollateral(positionId, lendingPool, share);
+            addCollateral(positionId, lendingPool, collateralShares);
         }
 
-        //!QUI CI VA IL CONTROLLO DEL MARGINE E SE È SICURO PRENDERE UN PRESTITO
-
-        uint256 usdtInBalance = USDT.balanceOf(address(this));
-
+        // Prendi prestito USDT
         uint256 _debtShares = borrow(
             positionId,
             borrowLeningPool,
@@ -335,20 +342,13 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         );
         debtUSDTShares += _debtShares;
 
+        // Swappa USDT → MNT
         address[] memory path = new address[](2);
         path[0] = address(USDT);
         path[1] = address(WMNT);
 
-        console.log("Sono arrivato qui 2!");
-
-        console.log(
-            "Quanti USDt ho in bilancio: ",
-            USDT.balanceOf(address(this))
-        );
-        console.log("Quanti usdt voglio vendere? ", _amountBorrow);
-
-        uint256 amountMNTlong = _swapExactTokensForTokens(
-            LBRouter,
+        uint256 amountMNTBought = _swapExactTokensForTokens(
+            AgniRouter,
             _amountBorrow,
             address(USDT),
             minMntToBuy,
@@ -357,27 +357,23 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             deadline
         );
 
-        //require(
-        //    USDT.balanceOf(address(this)) >= usdtInBalance + _amountBorrow,
-        //    "TradingContract: Borrow didn't succeed."
-        //);
-
+        // Salva operazione con tracking corretto
         LongOp memory newLong = LongOp({
             isOpen: true,
             entryTime: uint16(block.timestamp),
             exitTime: 0,
             entryPrice: entryPrice,
             exitPrice: exitPrice,
-            amountMntSell: amountMNTlong,
-            amountUSDTtoBuy: _amountBorrow,
+            amountMntBought: amountMNTBought, // MNT comprati con leva
+            amountUSDTBorrowed: _amountBorrow, // USDT presi in prestito
+            collateralShares: collateralShares, // ✅ SHARES DI COLLATERALE
+            debtUSDTShares: _debtShares, // shares di debito
             stopLoss: stopLoss,
             takeProfit: takeProfit,
-            debtUSDTShares: _debtShares,
             result: 0
         });
 
         longOps[actualCount] = newLong;
-
         success = true;
     }
 
@@ -419,71 +415,73 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         closingOP.isOpen = false;
         closingOP.exitTime = uint16(block.timestamp);
 
-        // 1. CALCOLA QUANTO MNT VENDERE PER RIPAGARE IL DEBITO USDT
+        // 1. CALCOLA QUANTO USDT SERVONO PER RIPAGARE IL DEBITO
+        uint256 debtShares = closingOP.debtUSDTShares;
+        uint256 usdtAmountToRepay = ILendingPool(borrowLeningPool)
+            .debtShareToAmtCurrent(debtShares);
+
+        // 2. CALCOLA MNT DA VENDERE PER OTTENERE QUEGLI USDT
         int256 currentPrice = getChainlinkDataFeedLatestAnswer();
-        uint256 debtInUSDT = closingOP.amountUSDTtoBuy;
+        uint256 mntNeededForDebt = (usdtAmountToRepay * 1e18) /
+            uint256(currentPrice);
+        mntNeededForDebt = (mntNeededForDebt * 1050) / 1000; // +5% buffer
 
-        // Calcola MNT necessari per ripagare il debito (con buffer slippage)
-        uint256 mntNeededForDebt = (debtInUSDT * 1e18) / uint256(currentPrice);
-        mntNeededForDebt = (mntNeededForDebt * 1050) / 1000; // +5% buffer per slippage
-
-        // 2. VENDI MNT PER OTTENERE USDT
+        // 3. VENDI MNT PER OTTENERE USDT
         address[] memory path = new address[](2);
         path[0] = address(WMNT);
         path[1] = address(USDT);
 
         uint256 usdtReceived = _swapExactTokensForTokens(
-            LBRouter,
+            AgniRouter,
             mntNeededForDebt,
             address(WMNT),
-            (debtInUSDT * 95) / 100, // Minimo 95% del debito richiesto
+            1, //! solo per il test//(usdtAmountToRepay * 95) / 100, // Minimo 95% del debito richiesto
             path,
             address(this),
             deadline
         );
 
-        // 3. RIPAGA IL DEBITO USDT
-        USDT.approve(INIT_CORE, usdtReceived); //! da convertire in safeApprove
-
-        uint256 repayShares = closingOP.debtUSDTShares;
+        // 4. RIPAGA IL DEBITO USDT
+        USDT.approve(INIT_CORE, usdtAmountToRepay); // ! poi devo passare a safe approve
         uint256 repaidAmount = repay(
             positionId,
-            borrowLeningPool, // Pool corretto per il debito USDT
+            borrowLeningPool,
             address(USDT),
-            repayShares
+            debtShares
         );
 
-        // 4. RIMUOVI IL COLLATERALE MNT
-        // Per ora assumiamo che le shares collaterali siano quelle che hai depositato
-        // (dovrai trackare meglio questo valore nella struct LongOp)
-        removeCollateral(positionId, lendingPool, repayShares, address(this));
-
-        // 5. PRELEVA IL COLLATERALE ORIGINALE DAL LENDING POOL
-        uint256 withdrawnAmount = withdrawInit(
+        // 5. RIMUOVI IL COLLATERALE USANDO LE SHARES CORRETTE
+        removeCollateral(
+            positionId,
             lendingPool,
-            repayShares, // Usa le stesse shares per semplicità
+            closingOP.collateralShares,
             address(this)
         );
 
-        // 6. CALCOLA PROFIT/LOSS SEMPLICE
-        uint256 totalMNTBack = withdrawnAmount +
-            (closingOP.amountMntSell - mntNeededForDebt);
-        // Confronta con quello che avevi all'inizio (collaterale originale)
-        // Per ora assumiamo che sia uguale a amountMntSell come placeholder
-        uint256 originalMNTInvested = closingOP.amountMntSell; // TODO: salvare il vero collaterale nella struct
+        // 6. PRELEVA IL COLLATERALE ORIGINALE
+        uint256 withdrawnAmount = withdrawInit(
+            lendingPool,
+            closingOP.collateralShares, // ✅ USA COLLATERAL SHARES, NON DEBT SHARES
+            address(this)
+        );
 
-        if (totalMNTBack >= originalMNTInvested) {
-            closingOP.result = int256(totalMNTBack - originalMNTInvested);
+        // 7. CALCOLA PROFIT/LOSS CORRETTO
+        uint256 totalMNTRecovered = withdrawnAmount +
+            (closingOP.amountMntBought - mntNeededForDebt);
+        // Il collaterale originale era l'ammontare depositato inizialmente
+        uint256 originalCollateral = (closingOP.collateralShares * 1e18) / 1e18; // Conversione approssimativa
+
+        if (totalMNTRecovered >= originalCollateral) {
+            closingOP.result = int256(totalMNTRecovered - originalCollateral);
         } else {
-            closingOP.result = -int256(originalMNTInvested - totalMNTBack);
+            closingOP.result = -int256(originalCollateral - totalMNTRecovered);
         }
 
-        // 7. AGGIORNA TRACKING
+        // 8. AGGIORNA TRACKING GLOBALI
         debtUSDTShares -= closingOP.debtUSDTShares;
-        balanceshare -= repayShares;
+        balanceshare -= closingOP.collateralShares;
 
         closingOP.exitPrice = uint256(currentPrice * 1e10);
-
         success = true;
     }
 
@@ -537,6 +535,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             entryPrice,
             exitPrice
         );
+    }
+
+    function closeLongOp(uint256 indexOp, uint256 deadline) external {
+        _longClose(indexOp, deadline);
     }
 
     function onERC721Received(

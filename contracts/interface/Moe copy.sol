@@ -34,8 +34,9 @@ interface ILBRouter {
         uint256 amountIn,
         uint256 amountOutMin,
         address[] calldata path,
-        address to
-    ) external payable returns  (uint256 amountOutReal);
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountOutReal);
 
 
 
