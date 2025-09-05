@@ -27,11 +27,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     address public constant poolSwap =
         0xB52b1F5e08c04a8c33F4C7363fa2DE23B9BC169f;
-    //0x45A62B090DF48243F12A21897e7ed91863E2c86b; // MNT/USDt
-
-    //address internal constant LBRouter =
-    //    0x319B69888b0d11cEC22caA5034e25FfFBDc88421;
-    //    //0xeaEE7EE68874218c3558b40063c42B82D3E7232a; // Merchant Moe LBRouter
 
     address internal constant AgniRouter =
         0xB52b1F5e08c04a8c33F4C7363fa2DE23B9BC169f;
@@ -112,7 +107,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
-        uint256 deadline,
         uint256 stopLoss,
         uint256 takeProfit
     ) external returns (bool success) {
@@ -121,7 +115,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             exitPrice,
             amountMntSell,
             minUsdtToBuy,
-            deadline,
             stopLoss,
             takeProfit
         );
@@ -129,9 +122,9 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     function executeShortClose(
         uint256 indexOp,
-        uint256 deadline
+        uint256 amountOutMin
     ) external returns (bool success) {
-        success = _shortClose(indexOp, deadline);
+        success = _shortClose(indexOp, amountOutMin);
     }
 
     //*------------------------------ SHORT OPERATIONS --------------------
@@ -141,16 +134,16 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 exitPrice,
         uint256 amountMntSell,
         uint256 minUsdtToBuy,
-        uint256 deadline,
         uint256 stopLoss,
         uint256 takeProfit
     ) internal returns (bool success) {
-        //! per fare short, devo venedere MNT, e prendere usd , questi li posso poi depositare per prendere yield
+
 
         uint256 actualCount = shortOpCounter;
         shortOpCounter += 1;
 
         //? devo innanzitutto capire se ho abbastanza MNT da vendere
+        //! DEvo pero usare un bilancio interno? o no ? 
         require(
             WMNT.balanceOf(address(this)) >= amountMntSell,
             "Strategy3rd: Not enough MNT to sell for short."
@@ -167,9 +160,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             address(WMNT),
             minUsdtToBuy,
             path,
-            address(this),
-            deadline
+            address(this)
         );
+
+        //! non c'è bisogno dell'oracolo qui perche il minimo accettato lo passo come input
 
         require(
             usdReceiver >= minUsdtToBuy,
@@ -197,7 +191,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     function _shortClose(
         uint256 indexOp,
-        uint256 deadline
+        uint256 minOutAmount
     ) internal returns (bool success) {
         ShortOp storage closingOP = shortOps[indexOp];
         require(
@@ -217,10 +211,9 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             AgniRouter,
             closingOP.amountUSDTtoBuy,
             address(USDT),
-            1, //!! PER ORA VA BENE COSI MA DECO CALCOLARE LO SLIPAGE SE NO ADDIO
+            minOutAmount,
             path,
-            address(this),
-            deadline
+            address(this)
         );
 
         closingOP.exitPrice = uint256(
@@ -253,8 +246,8 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         success = true;
     }
 
-    bool private positonOpened;
-    uint256 private positionId;
+    //bool private positonOpened;//! questi mi sa che sono superflui e dannosi
+    //uint256 private positionId;//! questi mi sa che sono superflui e dannosi
 
     function _createInitPosition()
         internal
@@ -262,13 +255,14 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     {
         uint16 mode = 1; // 1 = isolated, 2 = cross
         posId = createInitPosition(mode, address(this));
-        positionId = posId;
-        positonOpened = true;
+        //positionId = posId;
+        //positonOpened = true;
         success = true;
     }
 
     function _repayDebtUSD(
-        uint256 _amount
+        uint256 _amount,
+        uint256 positionId
     ) internal returns (uint256 repaidAmount) {
         repaidAmount = repay(
             positionId,
@@ -279,7 +273,8 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     }
 
     function _removeWmntCollateral(
-        uint256 _shares
+        uint256 _shares,
+        uint256 positionId
     ) internal returns (bool success) {
         removeCollateral(positionId, borrowLeningPool, _shares, address(this));
         success = true;
@@ -289,6 +284,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         bool isOpen;
         uint16 entryTime;
         uint16 exitTime;
+        uint256 posID; // position ID in Init
         uint256 entryPrice;
         uint256 exitPrice;
         uint256 amountMntBought; // MNT comprati con leva (ex amountMntSell)
@@ -310,7 +306,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 _amountBorrow,
         uint256 stopLoss,
         uint256 takeProfit,
-        uint256 deadline,
         uint256 minMntToBuy,
         uint256 entryPrice,
         uint256 exitPrice
@@ -324,18 +319,23 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         longOpCounter += 1;
 
         // Deposita MNT e ottieni shares
-        (, uint256 collateralShares) = _depositMNTforUSD(_amountColl);
+        (bool success1, uint256 collateralShares) = _depositMNTforUSD(_amountColl);
+        require(success1, "TradingContract: Deposit MNT failed.");
 
-        if (!positonOpened) {
-            (, uint256 _posId) = _createInitPosition();
-            addCollateral(_posId, lendingPool, collateralShares);
-        } else {
-            addCollateral(positionId, lendingPool, collateralShares);
-        }
+        //if (!positonOpened) {
+        (bool success2, uint256 _posId) = _createInitPosition();
+        require(success2, "TradingContract: Create position failed.");
+        addCollateral(_posId, lendingPool, collateralShares);
+
+        
+        //! INIT CI PERMETTE DI APRIRE UNA NUOVA POSIZIONE OGNI OPERAZIONE QUINDI POSSIAMO NON RISCHIARE IL CAPITALE DI TUTTO PER LA SINGOLA OPERAZIONE    
+        //} else {
+        //    addCollateral(positionId, lendingPool, collateralShares);
+        //}
 
         // Prendi prestito USDT
         uint256 _debtShares = borrow(
-            positionId,
+            _posId,
             borrowLeningPool,
             _amountBorrow,
             address(this)
@@ -353,14 +353,14 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             address(USDT),
             minMntToBuy,
             path,
-            address(this),
-            deadline
+            address(this)
         );
 
         // Salva operazione con tracking corretto
         LongOp memory newLong = LongOp({
             isOpen: true,
             entryTime: uint16(block.timestamp),
+            posID: _posId,
             exitTime: 0,
             entryPrice: entryPrice,
             exitPrice: exitPrice,
@@ -404,7 +404,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     function _longClose(
         uint256 indexOp,
-        uint256 deadline
+        uint256 amountOutMin
     ) internal returns (bool success) {
         LongOp storage closingOP = longOps[indexOp];
         require(
@@ -437,14 +437,12 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             address(WMNT),
             1, //! solo per il test//(usdtAmountToRepay * 95) / 100, // Minimo 95% del debito richiesto
             path,
-            address(this),
-            deadline
+            address(this)
         );
-
         // 4. RIPAGA IL DEBITO USDT
         USDT.approve(INIT_CORE, usdtAmountToRepay); // ! poi devo passare a safe approve
         uint256 repaidAmount = repay(
-            positionId,
+            closingOP.posID,
             borrowLeningPool,
             address(USDT),
             debtShares
@@ -452,7 +450,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
         // 5. RIMUOVI IL COLLATERALE USANDO LE SHARES CORRETTE
         removeCollateral(
-            positionId,
+            closingOP.posID,
             lendingPool,
             closingOP.collateralShares,
             address(this)
@@ -522,15 +520,13 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 takeProfit,
         uint256 minMntToBuy,
         uint256 entryPrice,
-        uint256 exitPrice,
-        uint256 deadline
+        uint256 exitPrice
     ) external {
         _longOP(
             _amountColl,
             _amountBorrow,
             stopLoss,
             takeProfit,
-            deadline,
             minMntToBuy,
             entryPrice,
             exitPrice

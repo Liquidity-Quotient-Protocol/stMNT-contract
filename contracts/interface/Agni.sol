@@ -63,21 +63,7 @@ interface ILBRouter {
 
 }
 
-interface ILBFactory {
-    function getBinStep(address pair) external view returns (uint256);
-     struct LBPairInformation {
-        uint16 binStep;
-        address LBPair;
-        bool createdByOwner;
-        bool ignoredForRouting;
-    }
-    
-    function getLBPairInformation(
-        address tokenA, 
-        address tokenB, 
-        uint256 binStep
-    ) external view returns (LBPairInformation memory);
-}
+
 
 interface ILBPair {
     function getActiveId() external view returns (uint24);
@@ -90,5 +76,5 @@ interface ILBPair {
         address account,
         uint256 id
     ) external view returns (uint256);
-    // Puoi aggiungere altre funzioni se necessarie
+   
 }

@@ -73,7 +73,6 @@ contract TradingComprehensiveTest is Test {
             1800 * 1e18,     // exit price
             0.8 ether,       // amount MNT to sell
             0,               // min USDT
-            block.timestamp + 1000,
             2200 * 1e18,     // stop loss
             1600 * 1e18      // take profit
         );
@@ -94,7 +93,7 @@ contract TradingComprehensiveTest is Test {
 
         // CLOSE SHORT
         console.log("\n--- CLOSING SHORT POSITION ---");
-        tradingContract.executeShortClose(0, block.timestamp + 1000);
+        tradingContract.executeShortClose(0, 1);
 
         shortOp = tradingContract.getShortOp(0);
         console.log("Short closed - Exit price:", shortOp.exitPrice);
@@ -143,8 +142,7 @@ contract TradingComprehensiveTest is Test {
             0,               // take profit
             0,               // min MNT to buy
             0,               // entry price
-            0,               // exit price
-            block.timestamp + 1000
+            0               // exit price
         );
 
         uint256 longOpCount = tradingContract.getLongOpCounter();
@@ -187,22 +185,22 @@ contract TradingComprehensiveTest is Test {
 
         // Test multiple short operations with different amounts
         console.log("\n--- Testing Small Short (0.1 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.1 ether, 0, block.timestamp + 1000, 0, 0);
-        tradingContract.executeShortClose(0, block.timestamp + 1000);
+        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.1 ether, 0, 0, 0);
+        tradingContract.executeShortClose(0, 1);
         
         TradingContract.ShortOp memory smallShort = tradingContract.getShortOp(0);
         console.log("Small short result:", smallShort.result);
 
         console.log("\n--- Testing Medium Short (0.5 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.5 ether, 0, block.timestamp + 1000, 0, 0);
-        tradingContract.executeShortClose(1, block.timestamp + 1000);
+        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.5 ether, 0,  0, 0);
+        tradingContract.executeShortClose(1, 1);
         
         TradingContract.ShortOp memory mediumShort = tradingContract.getShortOp(1);
         console.log("Medium short result:", mediumShort.result);
 
         console.log("\n--- Testing Large Short (1.0 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 1.0 ether, 0, block.timestamp + 1000, 0, 0);
-        tradingContract.executeShortClose(2, block.timestamp + 1000);
+        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 1.0 ether, 0,  0, 0);
+        tradingContract.executeShortClose(2, 1);
         
         TradingContract.ShortOp memory largeShort = tradingContract.getShortOp(2);
         console.log("Large short result:", largeShort.result);
@@ -228,7 +226,7 @@ contract TradingComprehensiveTest is Test {
         console.log("Initial short operations count:", initialShorts);
 
         // Open operation
-        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.3 ether, 0, block.timestamp + 1000, 0, 0);
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.3 ether, 0,  0, 0);
         
         uint256 afterOpenShorts = tradingContract.getShortOpCounter();
         console.log("After open short operations count:", afterOpenShorts);
@@ -244,7 +242,7 @@ contract TradingComprehensiveTest is Test {
         assertEq(op.exitTime, 0, "Exit time should be zero");
 
         // Close operation
-        tradingContract.executeShortClose(initialShorts, block.timestamp + 1000);
+        tradingContract.executeShortClose(initialShorts, 1);
         
         op = tradingContract.getShortOp(initialShorts);
         console.log("After close - isOpen:", op.isOpen);
@@ -256,7 +254,7 @@ contract TradingComprehensiveTest is Test {
 
         // Verify can't close again
         vm.expectRevert("Strategy3rd: Short operation already closed.");
-        tradingContract.executeShortClose(initialShorts, block.timestamp + 1000);
+        tradingContract.executeShortClose(initialShorts, 1);
         
         console.log("State management working correctly");
     }
@@ -277,7 +275,7 @@ contract TradingComprehensiveTest is Test {
         console.log("Internal USDT tracking:", tradingContract.getUsdBalance());
 
         // Perform operation
-        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 1.5 ether, 0, block.timestamp + 1000, 0, 0);
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 1.5 ether, 0,  0, 0);
 
         uint256 contractMNTAfter = WMNT.balanceOf(address(tradingContract));
         uint256 contractUSDTAfter = USDT.balanceOf(address(tradingContract));
@@ -289,7 +287,7 @@ contract TradingComprehensiveTest is Test {
         console.log("Internal USDT tracking:", tradingContract.getUsdBalance());
 
         // Close operation
-        tradingContract.executeShortClose(0, block.timestamp + 1000);
+        tradingContract.executeShortClose(0, 1);
 
         uint256 contractMNTFinal = WMNT.balanceOf(address(tradingContract));
         uint256 contractUSDTFinal = USDT.balanceOf(address(tradingContract));
