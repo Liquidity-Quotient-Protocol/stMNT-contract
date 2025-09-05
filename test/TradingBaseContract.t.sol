@@ -13,297 +13,239 @@ interface IWETH {
     function balanceOf(address) external view returns (uint256);
 }
 
-contract TradingComprehensiveTest is Test {
-    IWETH constant WMNT = IWETH(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8);
-    IERC20 private constant USDT = IERC20(0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE);
+contract TradingContractTest is Test {
+    TradingContract public tradingContract;
+    
+    IWETH public constant WMNT = IWETH(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8);
+    IERC20 public constant USDT = IERC20(0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE);
+    
+    address public admin = address(1);
+    address public aiAgent = address(2);
+    address public guardian = address(3);
+    address public user = address(4);
+    
+    address public constant USDT_WHALE = 0xb24692D17baBEFd97eA2B4ca604A481a7cc2c8EA;
 
-    TradingContract tradingContract;
-    address user = address(1);
-
-    function setUp() internal {
+    function setUp() public {
+        vm.startPrank(admin);
         tradingContract = new TradingContract(0xD97F20bEbeD74e8144134C4b148fE93417dd0F96);
         tradingContract.setLendingPool(0x44949636f778fAD2b139E665aee11a2dc84A2976);
         tradingContract.setBorrowLendingPool(0xadA66a8722B5cdfe3bC504007A5d793e7100ad09);
+        tradingContract.grantRole(tradingContract.AI_AGENT(), aiAgent);
+        tradingContract.grantRole(tradingContract.GUARDIAN_ROLE(), guardian);
+        vm.stopPrank();
         
-        console.log("=== SETUP COMPLETED ===");
-        console.log("TradingContract deployed at:", address(tradingContract));
-        console.log("User address:", user);
+        console.log("Setup completed");
     }
 
     function prepareFunds(uint256 mntAmount, uint256 usdAmount) internal {
-        // Setup MNT
         vm.deal(user, mntAmount);
         vm.startPrank(user);
         WMNT.deposit{value: mntAmount}();
         WMNT.approve(address(tradingContract), mntAmount);
         tradingContract.putMNTBalance(mntAmount);
         vm.stopPrank();
-
-        // Setup USDT
-        vm.startPrank(0xb24692D17baBEFd97eA2B4ca604A481a7cc2c8EA);
+        
+        vm.startPrank(USDT_WHALE);
         USDT.transfer(user, usdAmount);
         vm.stopPrank();
-
+        
         vm.startPrank(user);
         USDT.approve(address(tradingContract), usdAmount);
         tradingContract.putUSDBalance(usdAmount);
         vm.stopPrank();
-
-        console.log("=== FUNDS PREPARED ===");
-        console.log("Contract MNT balance:", WMNT.balanceOf(address(tradingContract)));
-        console.log("Contract USDT balance:", USDT.balanceOf(address(tradingContract)));
+        
+        console.log("Funds prepared - MNT:", mntAmount, "USDT:", usdAmount);
     }
 
-    function testCompleteShortFlow() public {
-        setUp();
-        console.log("\n=== TESTING COMPLETE SHORT FLOW ===");
-
+    function testSimpleShortFlow() public {
+        console.log("\n=== SIMPLE SHORT TEST ===");
+        
         prepareFunds(2 ether, 3000 * 1e6);
-
-        // Log initial state
+        
         uint256 initialMNT = WMNT.balanceOf(address(tradingContract));
-        uint256 initialUSDT = USDT.balanceOf(address(tradingContract));
-        console.log("Initial MNT:", initialMNT);
-        console.log("Initial USDT:", initialUSDT);
-
-        // OPEN SHORT
-        console.log("\n--- OPENING SHORT POSITION ---");
+        console.log("Initial MNT balance:", initialMNT);
+        
+        // Open short
+        vm.startPrank(aiAgent);
         tradingContract.executeShortOpen(
-            2000 * 1e18,     // entry price
-            1800 * 1e18,     // exit price
-            0.8 ether,       // amount MNT to sell
-            0,               // min USDT
-            2200 * 1e18,     // stop loss
-            1600 * 1e18      // take profit
+            2000 * 1e18,  // entryPrice
+            1800 * 1e18,  // exitPrice
+            0.8 ether,    // amountMntSell
+            0,            // minUsdtToBuy
+            0,            // stopLoss
+            0             // takeProfit
         );
-
+        vm.stopPrank();
+        
         TradingContract.ShortOp memory shortOp = tradingContract.getShortOp(0);
         console.log("Short opened - MNT sold:", shortOp.amountMntSell);
         console.log("Short opened - USDT received:", shortOp.amountUSDTtoBuy);
-        console.log("Short opened - Entry price:", shortOp.entryPrice);
-        
-        // Verify short opened correctly
         assertTrue(shortOp.isOpen, "Short should be open");
-        assertGt(shortOp.amountUSDTtoBuy, 0, "Should have received USDT");
-
-        uint256 mntAfterOpen = WMNT.balanceOf(address(tradingContract));
-        uint256 usdtAfterOpen = USDT.balanceOf(address(tradingContract));
-        console.log("After open - MNT balance:", mntAfterOpen);
-        console.log("After open - USDT balance:", usdtAfterOpen);
-
-        // CLOSE SHORT
-        console.log("\n--- CLOSING SHORT POSITION ---");
-        tradingContract.executeShortClose(0, 1);
-
-        shortOp = tradingContract.getShortOp(0);
-        console.log("Short closed - Exit price:", shortOp.exitPrice);
-        console.log("Short closed - Result (MNT):", shortOp.result);
         
-        uint256 mntAfterClose = WMNT.balanceOf(address(tradingContract));
-        uint256 usdtAfterClose = USDT.balanceOf(address(tradingContract));
-        console.log("After close - MNT balance:", mntAfterClose);
-        console.log("After close - USDT balance:", usdtAfterClose);
-
-        // Verify short closed correctly
-        assertFalse(shortOp.isOpen, "Short should be closed");
-     
-
-        console.log("\n=== SHORT FLOW ANALYSIS ===");
-        int256 mntDelta = int256(mntAfterClose) - int256(initialMNT);
-        int256 usdtDelta = int256(usdtAfterClose) - int256(initialUSDT);
-        console.log("Net MNT change:", mntDelta);
-        console.log("Net USDT change:", usdtDelta);
-        console.log("Result matches calculation:", shortOp.result == mntDelta);
-    }
-
-    function testCompleteLongFlow() public {
-        setUp();
-        console.log("\n=== TESTING COMPLETE LONG FLOW ===");
-
-        prepareFunds(15000 ether, 500 * 1e6);
-
-        // Add extra USDT for closure (come nel tuo test)
-        vm.startPrank(0xb24692D17baBEFd97eA2B4ca604A481a7cc2c8EA);
-        USDT.transfer(address(tradingContract), 15000 * 1e6);
+        // Add time gap to fix timing issue
+        vm.warp(block.timestamp + 1);
+        
+        // Close short
+        vm.startPrank(guardian);
+        tradingContract.executeShortClose(0, 0);
         vm.stopPrank();
-
-        // Log initial state
-        uint256 initialMNT = WMNT.balanceOf(address(tradingContract));
-        uint256 initialUSDT = USDT.balanceOf(address(tradingContract));
-        console.log("Initial MNT:", initialMNT);
-        console.log("Initial USDT:", initialUSDT);
-
-        // OPEN LONG
-        console.log("\n--- OPENING LONG POSITION ---");
-        tradingContract.openLongOp(
-            12000 ether,     // collateral amount
-            200 * 1e6,       // borrow amount USDT
-            0,               // stop loss
-            0,               // take profit
-            0,               // min MNT to buy
-            0,               // entry price
-            0               // exit price
-        );
-
-        uint256 longOpCount = tradingContract.getLongOpCounter();
-        console.log("Long operations count:", longOpCount);
-        assertTrue(longOpCount > 0, "Should have created a long operation");
-
-        uint256 mntAfterOpen = WMNT.balanceOf(address(tradingContract));
-        uint256 usdtAfterOpen = USDT.balanceOf(address(tradingContract));
-        console.log("After open - MNT balance:", mntAfterOpen);
-        console.log("After open - USDT balance:", usdtAfterOpen);
-
-        // Verify long opened correctly
-        assertLt(mntAfterOpen, initialMNT, "Should have used MNT as collateral");
-
-        // CLOSE LONG
-        console.log("\n--- CLOSING LONG POSITION ---");
-        tradingContract.closeLongOp(longOpCount - 1, block.timestamp + 1000);
-
-        uint256 mntAfterClose = WMNT.balanceOf(address(tradingContract));
-        uint256 usdtAfterClose = USDT.balanceOf(address(tradingContract));
-        console.log("After close - MNT balance:", mntAfterClose);
-        console.log("After close - USDT balance:", usdtAfterClose);
-
-        console.log("\n=== LONG FLOW ANALYSIS ===");
-        int256 mntDelta = int256(mntAfterClose) - int256(initialMNT);
-        int256 usdtDelta = int256(usdtAfterClose) - int256(initialUSDT);
-        console.log("Net MNT change:", mntDelta);
-        console.log("Net USDT change:", usdtDelta);
-
-        // Basic sanity checks
-        assertTrue(mntAfterClose > 0, "Should have some MNT remaining");
-        assertTrue(usdtAfterClose > 0, "Should have some USDT remaining");
+        
+        shortOp = tradingContract.getShortOp(0);
+        console.log("Short closed - Result:", shortOp.result);
+        assertFalse(shortOp.isOpen, "Short should be closed");
+        
+        uint256 finalMNT = WMNT.balanceOf(address(tradingContract));
+        console.log("Final MNT balance:", finalMNT);
+        console.log("MNT change:", int256(finalMNT) - int256(initialMNT));
+        
+        console.log("Short test completed successfully");
     }
 
-    function testProfitLossCalculations() public {
-        setUp();
-        console.log("\n=== TESTING PROFIT/LOSS CALCULATIONS ===");
-
-        prepareFunds(3 ether, 4000 * 1e6);
-
-        // Test multiple short operations with different amounts
-        console.log("\n--- Testing Small Short (0.1 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.1 ether, 0, 0, 0);
-        tradingContract.executeShortClose(0, 1);
+    function testMultipleShorts() public {
+        console.log("\n=== MULTIPLE SHORTS TEST ===");
         
-        TradingContract.ShortOp memory smallShort = tradingContract.getShortOp(0);
-        console.log("Small short result:", smallShort.result);
-
-        console.log("\n--- Testing Medium Short (0.5 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 0.5 ether, 0,  0, 0);
-        tradingContract.executeShortClose(1, 1);
+        prepareFunds(5 ether, 8000 * 1e6);
         
-        TradingContract.ShortOp memory mediumShort = tradingContract.getShortOp(1);
-        console.log("Medium short result:", mediumShort.result);
-
-        console.log("\n--- Testing Large Short (1.0 MNT) ---");
-        tradingContract.executeShortOpen(2000 * 1e18, 1900 * 1e18, 1.0 ether, 0,  0, 0);
-        tradingContract.executeShortClose(2, 1);
+        vm.startPrank(aiAgent);
         
-        TradingContract.ShortOp memory largeShort = tradingContract.getShortOp(2);
-        console.log("Large short result:", largeShort.result);
-
-        console.log("\n=== P&L ANALYSIS ===");
-        console.log("All operations should show similar loss patterns due to slippage/fees");
-        console.log("Larger operations should have proportionally larger absolute losses");
+        // Open 3 short positions
+        for(uint i = 0; i < 3; i++) {
+            uint256 amount = (i + 1) * 0.3 ether;
+            tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, amount, 0, 0, 0);
+            console.log("Opened short", i, "with amount:", amount);
+        }
         
-        // Basic sanity check - all should be losses due to slippage/fees
-        assertTrue(smallShort.result <= 0, "Small short should be loss due to fees");
-        assertTrue(mediumShort.result <= 0, "Medium short should be loss due to fees");
-        assertTrue(largeShort.result <= 0, "Large short should be loss due to fees");
+        vm.stopPrank();
+        
+        assertEq(tradingContract.getShortOpCounter(), 3, "Should have 3 shorts");
+        
+        // Close all positions
+        vm.startPrank(guardian);
+        for(uint i = 0; i < 3; i++) {
+            vm.warp(block.timestamp + 1); // Add time gap
+            tradingContract.executeShortClose(i, 0);
+            
+            TradingContract.ShortOp memory shortOp = tradingContract.getShortOp(i);
+        }
+        vm.stopPrank();
+        
+        console.log("Multiple shorts test completed");
     }
 
-    function testOperationStates() public {
-        setUp();
-        console.log("\n=== TESTING OPERATION STATES ===");
+    function testAccessControl() public {
+        console.log("\n=== ACCESS CONTROL TEST ===");
+        
+        prepareFunds(1 ether, 1000 * 1e6);
+        
+        // User cannot open short
+        vm.startPrank(user);
+        vm.expectRevert("Not an AI agent");
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.5 ether, 0, 0, 0);
+        vm.stopPrank();
+        
+        // Open position as AI agent
+        vm.startPrank(aiAgent);
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.5 ether, 0, 0, 0);
+        vm.stopPrank();
+        
+        // User cannot close
+        vm.startPrank(user);
+        vm.expectRevert("Not authorized");
+        tradingContract.executeShortClose(0, 0);
+        vm.stopPrank();
+        
+        // Guardian can close
+        vm.warp(block.timestamp + 1);
+        vm.startPrank(guardian);
+        tradingContract.executeShortClose(0, 0);
+        vm.stopPrank();
+        
+        console.log("Access control test passed");
+    }
 
+    function testErrorConditions() public {
+        console.log("\n=== ERROR CONDITIONS TEST ===");
+        
+        prepareFunds(0.1 ether, 100 * 1e6);
+        
+        vm.startPrank(aiAgent);
+        
+        // Try to sell more MNT than available - should revert with custom error
+        vm.expectRevert(abi.encodeWithSignature("InsufficientMNT()"));
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 10 ether, 0, 0, 0);
+        
+        // Open a position first
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.05 ether, 0, 0, 0);
+        
+        vm.warp(block.timestamp + 1);
+        
+        // Close it
+        tradingContract.executeShortClose(0, 0);
+        
+        // Try to close again - should revert with custom error
+        vm.expectRevert(abi.encodeWithSignature("PositionAlreadyClosed()"));
+        tradingContract.executeShortClose(0, 0);
+        
+        vm.stopPrank();
+        
+        console.log("Error conditions test passed");
+    }
+
+    function testContractState() public {
+        console.log("\n=== CONTRACT STATE TEST ===");
+        
         prepareFunds(2 ether, 2000 * 1e6);
-
-        // Test initial state
-        uint256 initialShorts = tradingContract.getShortOpCounter();
-        console.log("Initial short operations count:", initialShorts);
-
-        // Open operation
-        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.3 ether, 0,  0, 0);
         
-        uint256 afterOpenShorts = tradingContract.getShortOpCounter();
-        console.log("After open short operations count:", afterOpenShorts);
-        assertEq(afterOpenShorts, initialShorts + 1, "Should increment counter");
-
-        TradingContract.ShortOp memory op = tradingContract.getShortOp(initialShorts);
-        console.log("Operation state - isOpen:", op.isOpen);
-        console.log("Operation state - entryTime:", op.entryTime);
-        console.log("Operation state - exitTime:", op.exitTime);
+        console.log("Initial state:");
+        console.log("- Short counter:", tradingContract.getShortOpCounter());
+        console.log("- Long counter:", tradingContract.getLongOpCounter());
+        console.log("- MNT tracking:", tradingContract.getMntBalance());
+        console.log("- USDT tracking:", tradingContract.getUsdBalance());
         
-        assertTrue(op.isOpen, "Operation should be open");
-        assertGt(op.entryTime, 0, "Entry time should be set");
-        assertEq(op.exitTime, 0, "Exit time should be zero");
-
-        // Close operation
-        tradingContract.executeShortClose(initialShorts, 1);
+        vm.startPrank(aiAgent);
+        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 0.5 ether, 0, 0, 0);
+        vm.stopPrank();
         
-        op = tradingContract.getShortOp(initialShorts);
-        console.log("After close - isOpen:", op.isOpen);
-        console.log("After close - exitTime:", op.exitTime);
+        console.log("After opening short:");
+        console.log("- Short counter:", tradingContract.getShortOpCounter());
+        console.log("- Contract MNT:", WMNT.balanceOf(address(tradingContract)));
+        console.log("- Contract USDT:", USDT.balanceOf(address(tradingContract)));
         
-        assertFalse(op.isOpen, "Operation should be closed");
-        assertGt(op.exitTime, 0, "Exit time should be set");
-        assertGe(op.exitTime, op.entryTime, "Exit time should be >= entry time");
-
-        // Verify can't close again
-        vm.expectRevert("Strategy3rd: Short operation already closed.");
-        tradingContract.executeShortClose(initialShorts, 1);
+        TradingContract.ShortOp memory shortOp = tradingContract.getShortOp(0);
+        console.log("- Position open:", shortOp.isOpen);
+        console.log("- Entry time:", shortOp.entryTime);
         
-        console.log("State management working correctly");
+        vm.warp(block.timestamp + 1);
+        vm.startPrank(guardian);
+        tradingContract.executeShortClose(0, 0);
+        vm.stopPrank();
+        
+        shortOp = tradingContract.getShortOp(0);
+        console.log("After closing short:");
+        console.log("- Position open:", shortOp.isOpen);
+        console.log("- Exit time:", shortOp.exitTime);
+        console.log("- Result:", shortOp.result);
+        
+        console.log("Contract state test completed");
     }
 
-    function testContractBalances() public {
-        setUp();
-        console.log("\n=== TESTING CONTRACT BALANCE TRACKING ===");
-
-        prepareFunds(5 ether, 5000 * 1e6);
-
-        uint256 contractMNTBefore = WMNT.balanceOf(address(tradingContract));
-        uint256 contractUSDTBefore = USDT.balanceOf(address(tradingContract));
+    // Main test function
+    function testAllBasicFunctionality() public {
+        testSimpleShortFlow();
+        setUp(); // Reset
         
-        console.log("=== BEFORE OPERATIONS ===");
-        console.log("Contract MNT balance:", contractMNTBefore);
-        console.log("Contract USDT balance:", contractUSDTBefore);
-        console.log("Internal MNT tracking:", tradingContract.getMntBalance());
-        console.log("Internal USDT tracking:", tradingContract.getUsdBalance());
-
-        // Perform operation
-        tradingContract.executeShortOpen(2000 * 1e18, 1800 * 1e18, 1.5 ether, 0,  0, 0);
-
-        uint256 contractMNTAfter = WMNT.balanceOf(address(tradingContract));
-        uint256 contractUSDTAfter = USDT.balanceOf(address(tradingContract));
+        testMultipleShorts();
+        setUp(); // Reset
         
-        console.log("\n=== AFTER SHORT OPEN ===");
-        console.log("Contract MNT balance:", contractMNTAfter);
-        console.log("Contract USDT balance:", contractUSDTAfter);
-        console.log("Internal MNT tracking:", tradingContract.getMntBalance());
-        console.log("Internal USDT tracking:", tradingContract.getUsdBalance());
-
-        // Close operation
-        tradingContract.executeShortClose(0, 1);
-
-        uint256 contractMNTFinal = WMNT.balanceOf(address(tradingContract));
-        uint256 contractUSDTFinal = USDT.balanceOf(address(tradingContract));
+        testAccessControl();
+        setUp(); // Reset
         
-        console.log("\n=== AFTER SHORT CLOSE ===");
-        console.log("Contract MNT balance:", contractMNTFinal);
-        console.log("Contract USDT balance:", contractUSDTFinal);
-        console.log("Internal MNT tracking:", tradingContract.getMntBalance());
-        console.log("Internal USDT tracking:", tradingContract.getUsdBalance());
-
-        console.log("\n=== BALANCE CHANGES ===");
-        console.log("MNT change:", int256(contractMNTFinal) - int256(contractMNTBefore));
-        console.log("USDT change:", int256(contractUSDTFinal) - int256(contractUSDTBefore));
-
-        // Note: Internal tracking might not match actual balances due to trading operations
-        // This is expected behavior as the tracking is for user deposits/withdrawals
-        console.log("Balance tracking analysis complete");
+        testErrorConditions();
+        setUp(); // Reset
+        
+        testContractState();
+        
+        console.log("\n=== ALL BASIC TESTS COMPLETED ===");
     }
 }

@@ -15,7 +15,9 @@ interface ILendingPool {
         address to
     ) external returns (uint256);
 
-    function getUserAccountData(address user)
+    function getUserAccountData(
+        address user
+    )
         external
         view
         returns (
@@ -28,13 +30,13 @@ interface ILendingPool {
         );
 
     // *** QUESTA È LA FUNZIONE CHE CI SERVE! ***
-    function getReserveNormalizedIncome(address asset)
-        external
-        view
-        returns (uint256);
+    function getReserveNormalizedIncome(
+        address asset
+    ) external view returns (uint256);
 
-
-    function getReserveData(address asset)
+    function getReserveData(
+        address asset
+    )
         external
         view
         returns (
@@ -54,7 +56,9 @@ interface ILendingPool {
 }
 
 interface IProtocolDataProvider {
-    function getReserveTokensAddresses(address asset)
+    function getReserveTokensAddresses(
+        address asset
+    )
         external
         view
         returns (
@@ -63,7 +67,10 @@ interface IProtocolDataProvider {
             address variableDebtTokenAddress
         );
 
-    function getUserReserveData(address asset, address user)
+    function getUserReserveData(
+        address asset,
+        address user
+    )
         external
         view
         returns (
@@ -78,7 +85,9 @@ interface IProtocolDataProvider {
             bool usageAsCollateralEnabled
         );
 
-    function getReserveData(address asset)
+    function getReserveData(
+        address asset
+    )
         external
         view
         returns (
@@ -94,3 +103,4 @@ interface IProtocolDataProvider {
             uint40 lastUpdateTimestamp
         );
 }
+

@@ -8,16 +8,71 @@ import {Address} from "@openzeppelin-contract@5.3.0/contracts/utils/Address.sol"
 import {IERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin-contract@5.3.0/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC721Receiver} from "@openzeppelin-contract@5.3.0/contracts/token/ERC721/IERC721Receiver.sol";
+import {AccessControl} from "@openzeppelin-contract@5.3.0/contracts/access/AccessControl.sol";
+import {Pausable} from "@openzeppelin-contract@5.3.0/contracts/security/Pausable.sol";
+import {ReentrancyGuard} from "@openzeppelin-contract@5.3.0/contracts/security/ReentrancyGuard.sol";
 
 import {PriceLogic} from "./ChainlinkOp.sol";
 import {MoeContract} from "../TradingOp/SwapOperation.sol";
 import {Iinit} from "../DefiProtocol/InitProt.sol";
 
-import {IInitCore, ILendingPool} from "../interface/IInitCore.sol";
+import {IInitCore, ILendingPool, IMoneyMarketHook, IPosManager} from "../interface/IInitCore.sol";
 
-contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
+contract TradingContract is
+    PriceLogic,
+    MoeContract,
+    Iinit,
+    IERC721Receiver,
+    AccessControl,
+    Pausable,
+    ReentrancyGuard
+{
     using SafeERC20 for IERC20;
     using Address for address;
+
+    error InsufficientMNT();
+    error PositionAlreadyClosed();
+    error SlippageTooHigh();
+    error DepositFailed();
+    error ShortPositionCreationFailed();
+    error LongPositionCreationFailed();
+    error CloseShortFailed();
+    error CloseLongFailed();
+    error BorrowFailed();
+    error SwapFailed();
+
+    event OpenShorPosition(
+        uint256 indexed indexOp,
+        uint16 entryTime,
+        uint256 amountMntSell,
+        uint256 amountUSDTtoBuy
+    );
+    event CloseShortPosition(
+        uint256 indexed indexOp,
+        uint16 exitTime,
+        int256 result
+    );
+    event OpenLongPosition(
+        uint256 indexed indexOp,
+        uint16 entryTime,
+        uint256 amountMntBought,
+        uint256 amountUSDTBorrowed
+    );
+    event CloseLongPosition(
+        uint256 indexed indexOp,
+        uint16 exitTime,
+        int256 result
+    );
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant AI_AGENT = keccak256("AI_AGENT");
+    bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
+
+    IMoneyMarketHook private constant moneyMarketHook =
+        IMoneyMarketHook(0xf82CBcAB75C1138a8F1F20179613e7C0C8337346);
+
+    IPosManager private constant posManager =
+        IPosManager(0x0e7401707CD08c03CDb53DAEF3295DDFb68BBa92);
 
     IERC20 private constant WMNT =
         IERC20(0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8);
@@ -40,9 +95,26 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
     uint256 private balanceShare;
 
-    constructor(
-        address _priceFeedAddress
-    ) PriceLogic(_priceFeedAddress) Iinit(_initAddr) {}
+    struct LongOp {
+        bool isOpen;
+        uint16 entryTime;
+        uint16 exitTime;
+        uint256 posID; // position ID in Init
+        uint256 entryPrice;
+        uint256 exitPrice;
+        uint256 amountMntBought; // MNT comprati con leva (ex amountMntSell)
+        uint256 amountUSDTBorrowed; // USDT presi in prestito (ex amountUSDTtoBuy)
+        uint256 collateralShares; // ✅ AGGIUNTO: shares di collaterale depositate
+        uint256 debtUSDTShares; // shares di debito USDT
+        uint256 stopLoss;
+        uint256 takeProfit;
+        int256 result; //in MNT
+    }
+
+    uint256 private longOpCounter;
+    uint256 private debtUSDTShares;
+
+    mapping(uint256 => LongOp) private longOps;
 
     struct ShortOp {
         bool isOpen;
@@ -64,6 +136,49 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     uint256 private mntBalance;
     uint256 private usdBalance;
 
+    constructor(
+        address _priceFeedAddress
+    ) PriceLogic(_priceFeedAddress) Iinit(_initAddr) {
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(GUARDIAN_ROLE, msg.sender);
+        _grantRole(AI_AGENT, msg.sender);
+
+        _setRoleAdmin(ADMIN_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(GUARDIAN_ROLE, ADMIN_ROLE);
+        _setRoleAdmin(AI_AGENT, ADMIN_ROLE);
+
+        // Approve max tokens for router and INIT
+        WMNT.approve(AgniRouter, type(uint256).max);
+        USDT.approve(AgniRouter, type(uint256).max);
+        WMNT.approve(INIT_CORE, type(uint256).max);
+        USDT.approve(INIT_CORE, type(uint256).max);
+    }
+
+    modifier onlyAdmin() {
+        require(hasRole(ADMIN_ROLE, msg.sender), "Not an admin");
+        _;
+    }
+    modifier onlyAuthorized() {
+        require(
+            hasRole(ADMIN_ROLE, msg.sender) ||
+                hasRole(GUARDIAN_ROLE, msg.sender),
+            "Not authorized"
+        );
+        _;
+    }
+
+    modifier onlyAIAgent() {
+        require(hasRole(AI_AGENT, msg.sender), "Not an AI agent");
+        _;
+    }
+    modifier onlyAiOrGuardian() {
+        require(
+            hasRole(AI_AGENT, msg.sender) || hasRole(GUARDIAN_ROLE, msg.sender),
+            "Not authorized"
+        );
+        _;
+    }
+
     function getShortOpCounter() external view returns (uint256) {
         return shortOpCounter;
     }
@@ -84,7 +199,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         return usdBalance;
     }
 
-    function setLendingPool(address _lendingPool) external {
+    function setLendingPool(address _lendingPool) external onlyAdmin {
         require(
             _lendingPool != address(0),
             "Strategy1st: Invalid LendingPool address."
@@ -92,7 +207,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         lendingPool = _lendingPool;
     }
 
-    function setBorrowLendingPool(address _lendingPool) external {
+    function setBorrowLendingPool(address _lendingPool) external onlyAdmin {
         require(
             _lendingPool != address(0),
             "Strategy1st: Invalid LendingPool address."
@@ -109,7 +224,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 minUsdtToBuy,
         uint256 stopLoss,
         uint256 takeProfit
-    ) external returns (bool success) {
+    ) external onlyAIAgent returns (bool success) {
         success = _shortOpen(
             entryPrice,
             exitPrice,
@@ -118,13 +233,26 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             stopLoss,
             takeProfit
         );
+        if (!success) {
+            revert ShortPositionCreationFailed();
+        }
+        emit OpenShorPosition(
+            shortOpCounter - 1,
+            uint16(block.timestamp),
+            amountMntSell,
+            minUsdtToBuy
+        );
     }
 
     function executeShortClose(
         uint256 indexOp,
         uint256 amountOutMin
-    ) external returns (bool success) {
-        success = _shortClose(indexOp, amountOutMin);
+    ) external onlyAiOrGuardian returns (bool success, int256 profitLoss) {
+        (success, profitLoss) = _shortClose(indexOp, amountOutMin);
+        if (!success) {
+            revert CloseShortFailed();
+        }
+        emit CloseShortPosition(indexOp, uint16(block.timestamp), profitLoss);
     }
 
     //*------------------------------ SHORT OPERATIONS --------------------
@@ -137,23 +265,17 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 stopLoss,
         uint256 takeProfit
     ) internal returns (bool success) {
-
-
         uint256 actualCount = shortOpCounter;
         shortOpCounter += 1;
 
-        //? devo innanzitutto capire se ho abbastanza MNT da vendere
-        //! DEvo pero usare un bilancio interno? o no ? 
-        require(
-            WMNT.balanceOf(address(this)) >= amountMntSell,
-            "Strategy3rd: Not enough MNT to sell for short."
-        );
+        if (WMNT.balanceOf(address(this)) < amountMntSell) {
+            revert InsufficientMNT();
+        }
 
         address[] memory path = new address[](2);
         path[0] = address(WMNT);
         path[1] = address(USDT);
 
-        //? faccio ora lo swap da MNT a USDT
         uint256 usdReceiver = _swapExactTokensForTokens(
             AgniRouter,
             amountMntSell,
@@ -162,15 +284,14 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             path,
             address(this)
         );
+        if (usdReceiver == 0) {
+            revert SwapFailed();
+        }
 
-        //! non c'è bisogno dell'oracolo qui perche il minimo accettato lo passo come input
+        if (usdReceiver < minUsdtToBuy) {
+            revert SlippageTooHigh();
+        }
 
-        require(
-            usdReceiver >= minUsdtToBuy,
-            "Strategy3rd: Slippage too high on short open swap."
-        );
-
-        //? ora registro l'operazione
         ShortOp memory newShort = ShortOp({
             isOpen: true,
             entryTime: uint16(block.timestamp),
@@ -192,12 +313,11 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     function _shortClose(
         uint256 indexOp,
         uint256 minOutAmount
-    ) internal returns (bool success) {
+    ) internal returns (bool success, int256 profitLoss) {
         ShortOp storage closingOP = shortOps[indexOp];
-        require(
-            closingOP.isOpen,
-            "Strategy3rd: Short operation already closed."
-        );
+        if (!closingOP.isOpen) {
+            revert PositionAlreadyClosed();
+        }
 
         closingOP.isOpen = false;
         closingOP.exitTime = uint16(block.timestamp);
@@ -206,7 +326,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         path[0] = address(USDT);
         path[1] = address(WMNT);
 
-        //? faccio ora lo swap da USDT a MNT
         uint256 mntReceiver = _swapExactTokensForTokens(
             AgniRouter,
             closingOP.amountUSDTtoBuy,
@@ -216,22 +335,72 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             address(this)
         );
 
+        if (mntReceiver < minOutAmount) {
+            revert SlippageTooHigh();
+        }
+
+        if (mntReceiver == 0) {
+            revert SwapFailed();
+        }
+
         closingOP.exitPrice = uint256(
             getChainlinkDataFeedLatestAnswer() * 1e10
         );
 
         if (mntReceiver >= closingOP.amountMntSell) {
             closingOP.result = int256(mntReceiver - closingOP.amountMntSell);
+            profitLoss = closingOP.result;
         } else {
             closingOP.result = -int256(closingOP.amountMntSell - mntReceiver);
+            profitLoss = closingOP.result;
         }
 
-        return true;
+        success = true;
     }
 
     //*---------------------------------------------------------------------
 
     //*------------------------------ LONG OPERATIONS --------------------
+
+    function openLongOp(
+        uint256 _amountColl,
+        uint256 _amountBorrow,
+        uint256 stopLoss,
+        uint256 takeProfit,
+        uint256 minMntToBuy,
+        uint256 entryPrice,
+        uint256 exitPrice
+    ) external onlyAIAgent returns (bool success) {
+        success = _longOP(
+            _amountColl,
+            _amountBorrow,
+            stopLoss,
+            takeProfit,
+            minMntToBuy,
+            entryPrice,
+            exitPrice
+        );
+        if (!success) {
+            revert LongPositionCreationFailed();
+        }
+        emit OpenLongPosition(
+            longOpCounter - 1,
+            uint16(block.timestamp),
+            _amountColl,
+            _amountBorrow
+        );
+    }
+
+    function closeLongOp(
+        uint256 indexOp,
+        uint256 deadline
+    ) external onlyAiOrGuardian returns (bool success, int256 profitLoss) {
+        (success, profitLoss) = _longClose(indexOp, deadline);
+        if (!success) {
+            revert CloseLongFailed();
+        }
+        emit CloseLongPosition(indexOp, uint16(block.timestamp), profitLoss);
+    }
 
     uint256 private balanceshare;
 
@@ -239,15 +408,9 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 _amount
     ) internal returns (bool success, uint256 share) {
         share = depositInit(lendingPool, address(WMNT), _amount, address(this));
-
         balanceshare += share;
-
-        //! PER ORA CI TENIAMO SEMPLICI MA VANNO AGGIUNTI CONTROLLI E TRACKING DEI DEPOSITI E DEBITI
         success = true;
     }
-
-    //bool private positonOpened;//! questi mi sa che sono superflui e dannosi
-    //uint256 private positionId;//! questi mi sa che sono superflui e dannosi
 
     function _createInitPosition()
         internal
@@ -255,8 +418,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     {
         uint16 mode = 1; // 1 = isolated, 2 = cross
         posId = createInitPosition(mode, address(this));
-        //positionId = posId;
-        //positonOpened = true;
         success = true;
     }
 
@@ -280,27 +441,6 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         success = true;
     }
 
-    struct LongOp {
-        bool isOpen;
-        uint16 entryTime;
-        uint16 exitTime;
-        uint256 posID; // position ID in Init
-        uint256 entryPrice;
-        uint256 exitPrice;
-        uint256 amountMntBought; // MNT comprati con leva (ex amountMntSell)
-        uint256 amountUSDTBorrowed; // USDT presi in prestito (ex amountUSDTtoBuy)
-        uint256 collateralShares; // ✅ AGGIUNTO: shares di collaterale depositate
-        uint256 debtUSDTShares; // shares di debito USDT
-        uint256 stopLoss;
-        uint256 takeProfit;
-        int256 result; //in MNT
-    }
-
-    uint256 private longOpCounter;
-    uint256 private debtUSDTShares;
-
-    mapping(uint256 => LongOp) private longOps;
-
     function _longOP(
         uint256 _amountColl,
         uint256 _amountBorrow,
@@ -310,37 +450,65 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         uint256 entryPrice,
         uint256 exitPrice
     ) internal returns (bool success) {
-        require(
-            WMNT.balanceOf(address(this)) >= _amountColl,
-            "TradingContract: Not enough MNT to deposit for long."
-        );
+        if (WMNT.balanceOf(address(this)) < _amountColl) {
+            revert InsufficientMNT();
+        }
 
         uint256 actualCount = longOpCounter;
         longOpCounter += 1;
 
-        // Deposita MNT e ottieni shares
-        (bool success1, uint256 collateralShares) = _depositMNTforUSD(_amountColl);
-        require(success1, "TradingContract: Deposit MNT failed.");
+        // Approva WMNT per MoneyMarketHook
+        WMNT.approve(address(moneyMarketHook), _amountColl);
 
-        //if (!positonOpened) {
-        (bool success2, uint256 _posId) = _createInitPosition();
-        require(success2, "TradingContract: Create position failed.");
-        addCollateral(_posId, lendingPool, collateralShares);
+        // Costruisci parametri per MoneyMarketHook
+        IMoneyMarketHook.DepositParams[]
+            memory depositParams = new IMoneyMarketHook.DepositParams[](1);
+        depositParams[0] = IMoneyMarketHook.DepositParams({
+            pool: lendingPool,
+            amt: _amountColl,
+            rebaseHelperParams: IMoneyMarketHook.RebaseHelperParams(
+                address(0),
+                address(0)
+            )
+        });
 
-        
-        //! INIT CI PERMETTE DI APRIRE UNA NUOVA POSIZIONE OGNI OPERAZIONE QUINDI POSSIAMO NON RISCHIARE IL CAPITALE DI TUTTO PER LA SINGOLA OPERAZIONE    
-        //} else {
-        //    addCollateral(positionId, lendingPool, collateralShares);
-        //}
+        IMoneyMarketHook.BorrowParams[]
+            memory borrowParams = new IMoneyMarketHook.BorrowParams[](1);
+        borrowParams[0] = IMoneyMarketHook.BorrowParams({
+            pool: borrowLeningPool,
+            amt: _amountBorrow,
+            to: address(this)
+        });
 
-        // Prendi prestito USDT
-        uint256 _debtShares = borrow(
-            _posId,
-            borrowLeningPool,
-            _amountBorrow,
-            address(this)
-        );
-        debtUSDTShares += _debtShares;
+        IMoneyMarketHook.OperationParams memory params = IMoneyMarketHook
+            .OperationParams({
+                posId: 0, // 0 = crea nuova posizione
+                viewer: address(this),
+                mode: 1, // isolated mode
+                depositParams: depositParams,
+                withdrawParams: new IMoneyMarketHook.WithdrawParams[](0),
+                borrowParams: borrowParams,
+                repayParams: new IMoneyMarketHook.RepayParams[](0),
+                minHealth_e18: 1.2e18, // Min 120% health factor per sicurezza
+                returnNative: false
+            });
+
+        // Esegui operazione atomica: deposit + collateralize + borrow
+        (
+            uint256 posId,
+            uint256 initPosId,
+            bytes[] memory results
+        ) = moneyMarketHook.execute(params);
+
+        if (initPosId == 0) {
+            revert LongPositionCreationFailed();
+        }
+
+        // Verifica che abbiamo ricevuto gli USDT
+        uint256 usdtBalance = USDT.balanceOf(address(this));
+        if (usdtBalance < _amountBorrow) {
+            revert BorrowFailed();
+        }
 
         // Swappa USDT → MNT
         address[] memory path = new address[](2);
@@ -356,18 +524,34 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             address(this)
         );
 
-        // Salva operazione con tracking corretto
+        if (amountMNTBought < minMntToBuy) {
+            revert SlippageTooHigh();
+        }
+        if (amountMNTBought == 0) {
+            revert SwapFailed();
+        }
+
+        // Ottieni debt shares dalla posizione (invece di tracciare manualmente)
+        (address[] memory debtPools, uint[] memory debtShares) = posManager
+            .getPosBorrInfo(initPosId);
+        uint256 _debtShares = debtShares.length > 0 ? debtShares[0] : 0;
+
+        // Ottieni collateral shares dalla posizione
+        (address[] memory collPools, uint[] memory collAmts, , , ) = posManager
+            .getPosCollInfo(initPosId);
+        uint256 collateralShares = collAmts.length > 0 ? collAmts[0] : 0;
+
         LongOp memory newLong = LongOp({
             isOpen: true,
             entryTime: uint16(block.timestamp),
-            posID: _posId,
+            posID: initPosId, // Usa initPosId, non posId
             exitTime: 0,
             entryPrice: entryPrice,
             exitPrice: exitPrice,
-            amountMntBought: amountMNTBought, // MNT comprati con leva
-            amountUSDTBorrowed: _amountBorrow, // USDT presi in prestito
-            collateralShares: collateralShares, // ✅ SHARES DI COLLATERALE
-            debtUSDTShares: _debtShares, // shares di debito
+            amountMntBought: amountMNTBought,
+            amountUSDTBorrowed: _amountBorrow,
+            collateralShares: collateralShares,
+            debtUSDTShares: _debtShares,
             stopLoss: stopLoss,
             takeProfit: takeProfit,
             result: 0
@@ -405,12 +589,11 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     function _longClose(
         uint256 indexOp,
         uint256 amountOutMin
-    ) internal returns (bool success) {
+    ) internal returns (bool success, int256 profitLoss) {
         LongOp storage closingOP = longOps[indexOp];
-        require(
-            closingOP.isOpen,
-            "TradingContract: Long operation already closed."
-        );
+        if (!closingOP.isOpen) {
+            revert PositionAlreadyClosed();
+        }
 
         closingOP.isOpen = false;
         closingOP.exitTime = uint16(block.timestamp);
@@ -435,7 +618,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
             AgniRouter,
             mntNeededForDebt,
             address(WMNT),
-            1, //! solo per il test//(usdtAmountToRepay * 95) / 100, // Minimo 95% del debito richiesto
+            amountOutMin,
             path,
             address(this)
         );
@@ -471,8 +654,10 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
 
         if (totalMNTRecovered >= originalCollateral) {
             closingOP.result = int256(totalMNTRecovered - originalCollateral);
+            profitLoss = closingOP.result;
         } else {
             closingOP.result = -int256(originalCollateral - totalMNTRecovered);
+            profitLoss = closingOP.result;
         }
 
         // 8. AGGIORNA TRACKING GLOBALI
@@ -480,6 +665,7 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
         balanceshare -= closingOP.collateralShares;
 
         closingOP.exitPrice = uint256(currentPrice * 1e10);
+
         success = true;
     }
 
@@ -496,45 +682,64 @@ contract TradingContract is PriceLogic, MoeContract, Iinit, IERC721Receiver {
     }
 
     function withdrawMNT(uint256 amount) external {
-        require(
-            amount <= mntBalance,
-            "TradingContract: Not enough MNT balance to withdraw."
-        );
+        if (amount > mntBalance) {
+            revert InsufficientMNT();
+        }
         WMNT.transfer(msg.sender, amount);
         mntBalance -= amount;
     }
 
-    function withdrawUSD(uint256 amount) external {
-        require(
-            amount <= usdBalance,
-            "TradingContract: Not enough USD balance to withdraw."
+    // Aggiungi questa funzione view per monitoraggio posizioni
+    function checkLongPositionHealth(
+        uint256 indexOp
+    )
+        external
+        view
+        returns (uint256 healthFactor, bool isHealthy, bool nearLiquidation)
+    {
+        LongOp storage op = longOps[indexOp];
+        require(op.isOpen, "Position closed");
+
+        // Ottieni debt e collateral dalla posizione Init
+        (address[] memory debtPools, uint[] memory debtShares) = posManager
+            .getPosBorrInfo(op.posID);
+        (address[] memory collPools, uint[] memory collAmts, , , ) = posManager
+            .getPosCollInfo(op.posID);
+
+        if (debtShares.length == 0 || collAmts.length == 0) {
+            return (type(uint256).max, true, false);
+        }
+
+        // Calcola valori attuali
+        uint256 debtValue = ILendingPool(borrowLeningPool).debtShareToAmtStored(
+            debtShares[0]
         );
-        USDT.transfer(msg.sender, amount);
-        usdBalance -= amount;
+        uint256 collValue = (collAmts[0] *
+            uint256(getChainlinkDataFeedLatestAnswer())) / 1e18;
+
+        healthFactor = (collValue * 1e18) / debtValue;
+        isHealthy = healthFactor > 1e18; // > 100%
+        nearLiquidation = healthFactor < 1.1e18; // < 110%
     }
 
-    function openLongOp(
-        uint256 _amountColl,
-        uint256 _amountBorrow,
-        uint256 stopLoss,
-        uint256 takeProfit,
-        uint256 minMntToBuy,
-        uint256 entryPrice,
-        uint256 exitPrice
-    ) external {
-        _longOP(
-            _amountColl,
-            _amountBorrow,
-            stopLoss,
-            takeProfit,
-            minMntToBuy,
-            entryPrice,
-            exitPrice
-        );
-    }
+    // Funzione per ottenere tutte le posizioni long aperte
+    function getOpenLongPositions()
+        external
+        view
+        returns (uint256[] memory openPositions)
+    {
+        uint256 count = 0;
+        for (uint256 i = 0; i < longOpCounter; i++) {
+            if (longOps[i].isOpen) count++;
+        }
 
-    function closeLongOp(uint256 indexOp, uint256 deadline) external {
-        _longClose(indexOp, deadline);
+        openPositions = new uint256[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < longOpCounter; i++) {
+            if (longOps[i].isOpen) {
+                openPositions[index++] = i;
+            }
+        }
     }
 
     function onERC721Received(
